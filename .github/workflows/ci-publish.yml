@@ -28,6 +28,38 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest pytest-asyncio httpx
 
+      - name: Create CI env file
+        run: |
+          cat > .env.docker << 'EOF'
+          DB_NAME=moja_baza
+          DB_USER=moj_uzytkownik
+          DB_PASSWORD=ci_test_db_password
+          DB_HOST=postgres
+          DB_PORT=5432
+
+          ADMIN_DB_NAME=postgres
+          ADMIN_DB_USER=postgres
+          ADMIN_DB_PASSWORD=ci_admin_db_password
+          ADMIN_DB_HOST=postgres
+          ADMIN_DB_PORT=5432
+
+          SECRET_KEY=CI_SECRET_KEY_FOR_TESTS_ONLY_CHANGE_IN_PROD
+          ALGORITHM=HS256
+          ACCESS_TOKEN_EXPIRE_MINUTES=30
+          REFRESH_TOKEN_EXPIRE_DAYS=7
+
+          REDIS_HOST=redis
+          REDIS_PORT=6379
+          REDIS_CELERY_DB=0
+          REDIS_SSE_DB=1
+          REDIS_LIMITER_DB=2
+
+          CSV_WATCH_ENABLED=true
+          CSV_WATCH_DIRECTORY=/data/imports_input
+          CSV_WATCH_INTERVAL_SECONDS=30
+          CSV_WATCH_IMPORT_USER=watcher_ci
+          EOF
+
       - name: Build and start Docker stack
         run: |
           docker compose up -d --build
