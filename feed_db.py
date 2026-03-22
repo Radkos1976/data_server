@@ -1,4 +1,5 @@
 import os
+import sys
 import psycopg2
 from psycopg2 import sql
 import time
@@ -30,7 +31,7 @@ def wait_for_db(params, retries=20, delay=2):
 def setup_database():
     # Najpierw czekamy na start serwera
     if not wait_for_db(ADMIN_DB_PARAMS):
-        return
+        return False
 
     try:
         # 1. Połączenie jako admin (z autocommit dla CREATE DB/USER)
@@ -490,13 +491,16 @@ def setup_database():
         
         conn.commit()
         print("Struktura tabel została sprawdzona.")
+        return True
 
     except Exception as e:
         print(f"Błąd podczas konfiguracji: {e}")
+        return False
     finally:
         if 'conn' in locals() and conn:
             cur.close()
             conn.close()
 
 if __name__ == "__main__":
-    setup_database()
+    if not setup_database():
+        sys.exit(1)

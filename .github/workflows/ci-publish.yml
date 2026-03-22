@@ -59,6 +59,7 @@ jobs:
           CSV_WATCH_INTERVAL_SECONDS=30
           CSV_WATCH_IMPORT_USER=watcher_ci
           EOF
+          cp .env.docker .env
 
       - name: Build and start Docker stack
         run: |
