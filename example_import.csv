@@ -1,0 +1,14 @@
+external_id,product_code,quantity,unit,planned_date,comment
+EXT-001,PROD-A,10,szt,2026-04-01,Pierwsze zamówienie
+EXT-002,PROD-B,5,kpl,2026-04-02,Drugie zamówienie
+EXT-003,PROD-C,2,m2,2026-04-03,Trzecie zamówienie
+EXT-004,PROD-A,15,szt,2026-04-04,Kolejne zamówienie PROD-A
+EXT-005,PROD-A,8,szt,2026-04-05,Jeszcze PROD-A
+EXT-006,PROD-A,12,szt,2026-04-06,Dublet PROD-A - będzie warning
+,PROD-D,3,szt,2026-04-07,Błąd - brak external_id
+EXT-008,,20,szt,2026-04-08,Błąd - brak product_code
+EXT-009,PROD-E,-5,szt,2026-04-09,Błąd - ujemna quantity
+EXT-010,PROD-F,abc,szt,2026-04-10,Błąd - quantity nie jest liczbą
+EXT-011,PROD-G,7,metr,2026-04-11,Błąd - unit nie istnieje
+EXT-012,PROD-H,4,szt,2026-13-32,Błąd - niepoprawna data
+EXT-012,PROD-I,6,szt,2026-04-13,Błąd - duplikat external_id EXT-012

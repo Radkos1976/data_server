@@ -1,0 +1,20 @@
+# Dane PostgreSQL, Redis - nie wysyłaj do Docker build context
+data/
+
+# Środowiska wirtualne
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Pliki konfiguracyjne lokalne
+.env.local
+.env.docker.paths
+docker-compose.override.yml
+
+# Dokumentacja i inne
+dokumentacja/
+*.md
+.git/
+.gitignore

@@ -1,0 +1,88 @@
+services:
+  # =================================================================
+  # PostgreSQL - baza danych
+  # =================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: data_server_postgres
+    env_file:
+      - .env.docker
+    environment:
+      # Zmienne dla inicjalizacji PostgreSQL
+      # ADMIN_DB_NAME, ADMIN_DB_USER, ADMIN_DB_PASSWORD pochodzą z .env.docker
+      POSTGRES_DB: ${ADMIN_DB_NAME:-postgres}
+      POSTGRES_USER: ${ADMIN_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${ADMIN_DB_PASSWORD:-twoje_haslo_admina}
+    ports:
+      # Port hosta : port kontenera
+      # Jeśli postgress na hoście zajmuje 5432, zmień na inny port (np 5433)
+      - "5432:5432"
+    volumes:
+      # Dane PostgreSQL poza kontenerem (persystencja)
+      # Ścieżka na hoście : ścieżka w kontenerze
+      - ./data/postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - data_server_network
+
+  # =================================================================
+  # Redis - cache, SSE, Celery broker
+  # =================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: data_server_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      # Dane Redis poza kontenerem (persystencja)
+      - ./data/redis_data:/data
+    command: redis-server --appendonly yes --dir /data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - data_server_network
+
+  # =================================================================
+  # Aplikacja FastAPI
+  # =================================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: data_server_app
+    environment:
+      # Ładuj zmienne z .env.docker
+      - ENV_FILE=.env.docker
+    env_file:
+      - .env.docker
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Foldery importu CSV - poza kontenerem
+      # Ścieżka na hoście : ścieżka w kontenerze (widoczna w CSV_WATCH_DIRECTORY)
+      - ./data/imports_input:/data/imports_input
+      # (opcjonalnie) Logi aplikacji
+      - ./data/app_logs:/app/logs
+    command: >
+      sh -c "
+        python -m feed_db &&
+        uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+      "
+    networks:
+      - data_server_network
+
+networks:
+  data_server_network:
+    driver: bridge
