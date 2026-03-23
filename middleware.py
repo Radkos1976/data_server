@@ -30,15 +30,33 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         logger.info(f"REQUEST: {request.method} {request.url}")
+        client_ip = request.client.host if request.client else None
+        user_agent = request.headers.get("user-agent")
 
         try:
             response = await call_next(request)
         except Exception:
             username = getattr(request.state, "username", "unknown")
-            await log_access(username, request.method, request.url.path, 500, "Unhandled server error")
+            await log_access(
+                username,
+                request.method,
+                request.url.path,
+                500,
+                "Unhandled server error",
+                ip=client_ip,
+                user_agent=user_agent,
+            )
             raise
 
         username = getattr(request.state, "username", "unknown")
-        await log_access(username, request.method, request.url.path, response.status_code, "HTTP response completed")
+        await log_access(
+            username,
+            request.method,
+            request.url.path,
+            response.status_code,
+            "HTTP response completed",
+            ip=client_ip,
+            user_agent=user_agent,
+        )
         logger.info(f"RESPONSE: {request.method} {request.url} - Status: {response.status_code}")
         return response

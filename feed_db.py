@@ -352,7 +352,7 @@ def setup_database():
                              WHEN planned_date ~ ''^[0-9]{4}-[0-9]{2}-[0-9]{2}$''
                                   AND to_char(to_date(planned_date, ''YYYY-MM-DD''), ''YYYY-MM-DD'') = planned_date
                                  THEN to_date(planned_date, ''YYYY-MM-DD'')
-                             WHEN planned_date ~ ''^[0-9]{2}\.[0-9]{2}\.[0-9]{4}$''
+                             WHEN planned_date ~ ''^[0-9]{2}\\.[0-9]{2}\\.[0-9]{4}$''
                                   AND to_char(to_date(planned_date, ''DD.MM.YYYY''), ''DD.MM.YYYY'') = planned_date
                                  THEN to_date(planned_date, ''DD.MM.YYYY'')
                              WHEN planned_date ~ ''^[0-9]{2}-[0-9]{2}-[0-9]{4}$''
@@ -384,18 +384,7 @@ def setup_database():
                 );
                 EXECUTE sql_text;
 
-                -- 7. duplicate external_id in target table
-                sql_text := format(
-                    'UPDATE %I
-                     SET processing_status = ''ERROR'',
-                         error_reason = ''external_id już istnieje w bazie'',
-                         error_type = ''DUPLICATE_ERROR''
-                     WHERE external_id IN (SELECT external_id FROM imports_data)
-                       AND processing_status != ''ERROR''', p_temp_table
-                );
-                EXECUTE sql_text;
-
-                -- Mark remaining as VALID
+                -- 7. Mark remaining as VALID
                 sql_text := format(
                     'UPDATE %I
                      SET processing_status = ''VALID''
@@ -414,7 +403,21 @@ def setup_database():
                 EXECUTE sql_text;
                 GET DIAGNOSTICS error_count = ROW_COUNT;
 
-                -- Insert valid rows
+                -- Insert warnings for VALID rows that will replace records from previous imports
+                sql_text := format(
+                    'INSERT INTO imports_errors
+                     (import_file_id, row_number, external_id, product_code, quantity, unit, planned_date, comment, error_reason, error_type, warning_type)
+                     SELECT %s, t.row_number, t.external_id, t.product_code, t.quantity, t.unit, t.planned_date, t.comment,
+                            ''Rekord zastąpił istniejący rekord z importu #'' || d.import_file_id,
+                            ''INFO'',
+                            ''REPLACED_EXISTING''
+                     FROM %I t
+                     JOIN imports_data d ON d.external_id = t.external_id
+                     WHERE t.processing_status = ''VALID''', p_import_file_id, p_temp_table
+                );
+                EXECUTE sql_text;
+
+                -- Insert valid rows (upsert — replace if external_id already exists)
                 sql_text := format(
                     'INSERT INTO imports_data (import_file_id, external_id, product_code, quantity, unit, planned_date, comment)
                      SELECT %s, external_id, product_code, quantity::INTEGER, unit,
@@ -422,7 +425,7 @@ def setup_database():
                                 WHEN planned_date ~ ''^[0-9]{4}-[0-9]{2}-[0-9]{2}$''
                                      AND to_char(to_date(planned_date, ''YYYY-MM-DD''), ''YYYY-MM-DD'') = planned_date
                                     THEN to_date(planned_date, ''YYYY-MM-DD'')
-                                WHEN planned_date ~ ''^[0-9]{2}\.[0-9]{2}\.[0-9]{4}$''
+                                WHEN planned_date ~ ''^[0-9]{2}\\.[0-9]{2}\\.[0-9]{4}$''
                                      AND to_char(to_date(planned_date, ''DD.MM.YYYY''), ''DD.MM.YYYY'') = planned_date
                                     THEN to_date(planned_date, ''DD.MM.YYYY'')
                                 WHEN planned_date ~ ''^[0-9]{2}-[0-9]{2}-[0-9]{4}$''
@@ -436,7 +439,14 @@ def setup_database():
                             comment
                      FROM %I
                      WHERE processing_status = ''VALID''
-                     ON CONFLICT (external_id) DO NOTHING', p_import_file_id, p_temp_table
+                     ON CONFLICT (external_id) DO UPDATE SET
+                         import_file_id = EXCLUDED.import_file_id,
+                         product_code   = EXCLUDED.product_code,
+                         quantity       = EXCLUDED.quantity,
+                         unit           = EXCLUDED.unit,
+                         planned_date   = EXCLUDED.planned_date,
+                         comment        = EXCLUDED.comment,
+                         imported_at    = NOW()', p_import_file_id, p_temp_table
                 );
                 EXECUTE sql_text;
                 GET DIAGNOSTICS ok_count = ROW_COUNT;

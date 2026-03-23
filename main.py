@@ -1,4 +1,6 @@
 from fastapi import FastAPI, Depends, Path, HTTPException, Request, Query
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sse_starlette.sse import EventSourceResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_limiter import FastAPILimiter
@@ -9,6 +11,7 @@ import asyncio
 from redis import asyncio as aioredis
 import uuid
 import logging
+from pathlib import Path as FilePath
 from database import MODELS, AsyncSessionLocal
 from worker import process_transaction, process_delete_task, process_update_task
 from auth import require_permission, create_access_token, verify_password
@@ -44,6 +47,7 @@ async def lifespan(app: FastAPI):
     await redis.close()
 
 app = FastAPI(lifespan=lifespan)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Dodaj middleware
 app.add_middleware(LoggingMiddleware)
@@ -51,6 +55,24 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 # Rejestruj router importu CSV
 app.include_router(import_native_router)
+
+
+def _panel_path():
+    return FilePath(__file__).resolve().parent / "static" / "imports_panel.html"
+
+@app.get("/", include_in_schema=False)
+async def root_panel():
+    p = _panel_path()
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="Panel file not found")
+    return FileResponse(p)
+
+@app.get("/panel/imports", include_in_schema=False)
+async def imports_panel():
+    p = _panel_path()
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="Panel file not found")
+    return FileResponse(p)
 
 # 1. Automatyczne Endpointy (Dynamic CRUD)
 # Tworzymy endpointy dla każdej tabeli w bazie danych, korzystając z dynamicznie wygenerowanych modeli SQLModel i relacji. 
@@ -128,7 +150,7 @@ for table_name, ModelClass in MODELS.items():
         
         @app.delete(f"/{name}/{{item_id}}", tags=[name], status_code=202, dependencies=[Depends(RateLimiter(times=5, seconds=60))])
         async def delete_async(
-            item_id: int = Path(..., description="ID rekordu do usunięcia"),
+            item_id: str = Path(..., description="Klucz główny rekordu do usunięcia"),
             user: str = Depends(require_permission(name, "DELETE"))
         ):
             """
@@ -142,7 +164,7 @@ for table_name, ModelClass in MODELS.items():
         
         @app.put(f"/{name}/{{item_id}}", tags=[name], status_code=202, dependencies=[Depends(RateLimiter(times=10, seconds=60))])
         async def update_async(
-            item_id: int = Path(..., description="ID rekordu do aktualizacji"),
+            item_id: str = Path(..., description="Klucz główny rekordu do aktualizacji"),
             data: dict = None,
             user: str = Depends(require_permission(name, "PUT"))
         ):
@@ -234,30 +256,99 @@ async def refresh_access_token(refresh_token: str):
 async def get_access_logs(
     user: str = Depends(require_permission("access_logs", "GET")),
     page: int = Query(0, ge=0, description="Numer strony (0-based)"),
-    limit: int = Query(100, ge=1, le=1000, description="Liczba rekordów na stronę")
+    limit: int = Query(100, ge=1, le=1000, description="Liczba rekordów na stronę"),
+    search: str = Query(None)
 ):
     offset = page * limit
+    AccessLog = MODELS["access_logs"]
     async with AsyncSessionLocal() as session:
-        # Pobierz total count
-        total = (
-            await session.execute(
-                select(func.count()).select_from(MODELS["access_logs"])
+        base = select(AccessLog)
+        count_base = select(func.count()).select_from(AccessLog)
+        if search:
+            term = f"%{search}%"
+            from sqlalchemy import or_
+            cond = or_(
+                AccessLog.method.ilike(term),
+                AccessLog.path.ilike(term),
+                AccessLog.username.ilike(term)
             )
-        ).scalar_one()
-        
-        # Pobierz stronę
+            base = base.where(cond)
+            count_base = count_base.where(cond)
+        total = (await session.execute(count_base)).scalar_one()
         result = await session.execute(
-            select(MODELS["access_logs"])
-            .order_by(MODELS["access_logs"].timestamp.desc())
-            .offset(offset)
-            .limit(limit)
+            base.order_by(AccessLog.timestamp.desc())
+            .offset(offset).limit(limit)
         )
         logs = result.scalars().all()
-        
         return {
             "page": page,
             "limit": limit,
             "total": total,
-            "pages": (total + limit - 1) // limit,  # ceil(total / limit)
+            "pages": (total + limit - 1) // limit,
             "data": [serialize_row(log) for log in logs]
         }
+
+from auth import get_current_user
+
+@app.get("/me", tags=["Auth"])
+async def get_me(current_user: str = Depends(get_current_user)):
+    """Zwraca informacje o zalogowanym użytkowniku (username, rola, power)."""
+    UsersClass = MODELS["users"]
+    RoleClass  = MODELS["roles"]
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(UsersClass).where(UsersClass.username == current_user)
+        )
+        user = result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        role_name = None
+        power = 0
+        if user.role_id:
+            rr = await session.execute(
+                select(RoleClass).where(RoleClass.id == user.role_id)
+            )
+            role = rr.scalar_one_or_none()
+            if role:
+                role_name = role.name
+                power = role.power
+    return {"username": current_user, "role": role_name, "power": power}
+
+
+@app.get("/logs/tasks", tags=["Admin"])
+async def get_task_logs(
+    user: str = Depends(require_permission("access_logs", "GET")),
+    page: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    status: str = Query(None),
+    search: str = Query(None)
+):
+    """Logi zadań Celery z tabeli logs (tylko admin)."""
+    LogClass = MODELS["logs"]
+    async with AsyncSessionLocal() as session:
+        base = select(LogClass)
+        count_base = select(func.count()).select_from(LogClass)
+        filters = []
+        if status:
+            filters.append(LogClass.status == status)
+        if search:
+            term = f"%{search}%"
+            filters.append(
+                LogClass.task_name.ilike(term) | LogClass.username.ilike(term)
+            )
+        if filters:
+            from sqlalchemy import and_
+            cond = and_(*filters)
+            base = base.where(cond)
+            count_base = count_base.where(cond)
+        total = (await session.execute(count_base)).scalar_one()
+        result = await session.execute(
+            base.order_by(LogClass.created_at.desc())
+            .offset(page * limit).limit(limit)
+        )
+        logs = result.scalars().all()
+    return {
+        "page": page, "limit": limit, "total": total,
+        "pages": (total + limit - 1) // limit,
+        "data": [serialize_row(log) for log in logs]
+    }

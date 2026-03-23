@@ -1,0 +1,1424 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Panel Importów</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/imports_panel.css" />
+</head>
+<body>
+  <div class="app-shell">
+
+    <!-- ─── SIDEBAR ──────────────────────────── -->
+    <nav class="sidebar">
+      <div class="sidebar-brand">
+        <span class="brand-icon">📦</span>
+        <span class="brand-name">Panel Importów</span>
+        <button class="hamburger-btn" id="hamburgerBtn" title="Pokaż/ukryj menu" aria-label="Przełącz menu">&#9776;</button>
+      </div>
+
+      <div class="sidebar-nav">
+        <button class="nav-item active" data-view="viewImports" data-min-role="0">
+          <span class="nav-icon">☰</span>
+          <span class="nav-label">Lista importów</span>
+        </button>
+        <button class="nav-item" data-view="viewUpload" data-min-role="10">
+          <span class="nav-icon">⬆</span>
+          <span class="nav-label">Importuj plik</span>
+        </button>
+        <button class="nav-item" data-view="viewWatcher" data-min-role="100">
+          <span class="nav-icon">📁</span>
+          <span class="nav-label">Ustaw katalog importu</span>
+        </button>
+        <button class="nav-item" data-view="viewAllData" data-min-role="0">
+          <span class="nav-icon">🗃</span>
+          <span class="nav-label">Wszystkie dane</span>
+        </button>
+        <button class="nav-item" data-view="viewUnits" data-min-role="50">
+          <span class="nav-icon">⚙</span>
+          <span class="nav-label">Jednostki (UNIT)</span>
+        </button>
+        <button class="nav-item" data-view="viewLogs" data-min-role="100">
+          <span class="nav-icon">📋</span>
+          <span class="nav-label">Logi</span>
+        </button>
+      </div>
+
+      <div class="sidebar-footer">
+        <div id="footerLoggedIn" style="display:none;flex-direction:column;gap:7px;">
+          <div class="auth-user" id="authUser"></div>
+          <button class="btn-sidebar-logout" id="logoutBtn">Wyloguj</button>
+        </div>
+        <div id="footerLoggedOut" style="display:flex;flex-direction:column;gap:7px;">
+          <div class="login-title">Logowanie</div>
+          <input id="loginUser" class="sidebar-input" placeholder="Użytkownik" value="admin" autocomplete="username" />
+          <input id="loginPass" class="sidebar-input" type="password" placeholder="Hasło" value="admin" autocomplete="current-password" />
+          <button class="btn-sidebar-login" id="loginBtn">Zaloguj</button>
+          <div class="login-msg" id="loginMsg"></div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- ─── CONTENT AREA ─────────────────────── -->
+    <main class="content-area">
+
+      <!-- ── VIEW: Lista importów ─────────────── -->
+      <div class="view active" id="viewImports">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">Lista importów</h1>
+            <p class="view-sub">Filtruj po statusie, wyszukaj i przeglądaj szczegóły</p>
+          </div>
+          <button class="btn-main" id="refreshBtn">Odśwież</button>
+        </div>
+        <div class="imports-layout">
+
+          <!-- Lewa kolumna: lista -->
+          <div class="imports-list-pane">
+            <div class="list-controls">
+              <div class="toolbar">
+                <input id="importSearch" placeholder="Szukaj po nazwie lub ID…" />
+                <select id="statusFilter">
+                  <option value="ALL">Wszystkie</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="WITH_ERRORS">With errors</option>
+                </select>
+              </div>
+              <div class="pager">
+                <span class="muted" id="importMeta"></span>
+                <div style="display:flex;gap:6px;">
+                  <button class="btn-muted" id="prevPageBtn">‹ Poprzednia</button>
+                  <button class="btn-muted" id="nextPageBtn">Następna ›</button>
+                </div>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table id="importsTable">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Plik</th>
+                    <th>Status</th>
+                    <th>OK</th>
+                    <th>Błędy</th>
+                    <th>Przetworzono</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Prawa kolumna: szczegóły -->
+          <div class="imports-detail-pane">
+            <div class="detail-header">
+              <h2 class="view-title" style="font-size:1rem;">Szczegóły importu</h2>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <input id="recordSearch" placeholder="Szukaj external_id / product_code…" style="min-width:200px;" />
+                <button class="btn-muted" id="reloadDetailsBtn">Odśwież</button>
+              </div>
+            </div>
+            <div class="detail-body">
+              <p class="muted" id="detailsSubtitle">Wybierz import z listy</p>
+              <div class="meta" id="detailsMetrics"></div>
+              <div class="detail-tables">
+                <div class="detail-table-block">
+                  <h3 class="table-title">Rekordy OK</h3>
+                  <div class="table-wrap">
+                    <table id="okTable">
+                      <thead>
+                        <tr>
+                          <th>external_id</th>
+                          <th>product_code</th>
+                          <th>quantity</th>
+                          <th>unit</th>
+                          <th>planned_date</th>
+                        </tr>
+                      </thead>
+                      <tbody></tbody>
+                    </table>
+                  </div>
+                </div>
+                <div class="detail-table-block">
+                  <h3 class="table-title">Błędy i ostrzeżenia</h3>
+                  <div class="table-wrap">
+                    <table id="errTable">
+                      <thead>
+                        <tr>
+                          <th>typ</th>
+                          <th>row</th>
+                          <th>external_id</th>
+                          <th>product_code</th>
+                          <th>powód</th>
+                        </tr>
+                      </thead>
+                      <tbody></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label class="field-label">Podgląd szczegółów</label>
+                <div class="error-preview" id="errorPreview">Wybierz wiersz, aby zobaczyć pełną treść.</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ── VIEW: Importuj plik ───────────────── -->
+      <div class="view" id="viewUpload">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">Importuj plik CSV</h1>
+            <p class="view-sub">Wgraj plik CSV do przetworzenia przez serwer</p>
+          </div>
+        </div>
+        <div class="upload-area">
+          <div class="upload-card">
+            <div class="upload-icon">📂</div>
+            <h2 class="upload-heading">Wybierz plik CSV</h2>
+            <p class="muted">Obsługiwane formaty: .csv</p>
+            <div>
+              <input type="file" id="uploadInput" accept=".csv" hidden />
+              <button class="btn-muted" id="uploadPickBtn">Wybierz plik&hellip;</button>
+            </div>
+            <div id="uploadFilename" class="upload-filename muted">Nie wybrano pliku</div>
+            <button class="btn-main" id="uploadSubmitBtn" disabled>Wyślij do importu</button>
+            <div class="upload-result" id="uploadResult"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── VIEW: Ustaw katalog importu ─────── -->
+      <div class="view" id="viewWatcher">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">Ustawienia katalogu importu</h1>
+            <p class="view-sub">Konfiguracja watchera folderów CSV</p>
+          </div>
+          <button class="btn-main" id="watcherRefreshBtn">Odśwież</button>
+        </div>
+        <div class="watcher-layout">
+
+          <div class="watcher-card">
+            <div class="watcher-card-header">
+              <h3 class="section-heading">Ustawienia globalne</h3>
+              <button class="btn-main" id="watcherSaveBtn" style="padding:6px 14px;font-size:0.83rem;">Zapisz</button>
+            </div>
+            <div class="watcher-card-body">
+              <div class="settings-form">
+                <div class="settings-row">
+                  <span class="settings-label">Czujka aktywna</span>
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="watchEnabledToggle" style="width:17px;height:17px;" />
+                    <span id="watchEnabledLabel" class="muted">—</span>
+                  </label>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-label">Interwał schedulera (sekundy)</span>
+                  <input type="number" id="watchIntervalInput" class="settings-input" min="1" max="3600" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="watcher-card">
+            <div class="watcher-card-header">
+              <h3 class="section-heading">Status watchera (runtime)</h3>
+            </div>
+            <div class="watcher-card-body">
+              <div class="runtime-grid" id="watcherRuntime">
+                <div class="muted">Ładowanie…</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="watcher-card">
+            <div class="watcher-card-header">
+              <h3 class="section-heading">Monitorowane katalogi</h3>
+            </div>
+            <div class="watcher-card-body">
+              <!-- Formularz dodawania nowego katalogu -->
+              <div class="settings-form" style="flex-direction:row;align-items:flex-end;gap:10px;flex-wrap:wrap;max-width:none;margin-bottom:14px;">
+                <div>
+                  <label class="field-label">Ścieżka katalogu</label>
+                  <input id="folderPathInput" class="settings-input" placeholder="np. /data/csv_in" style="width:280px;" />
+                </div>
+                <div>
+                  <label class="field-label">Interwał (s)</label>
+                  <input type="number" id="folderIntervalInput" class="settings-input" value="60" min="1" max="86400" style="width:90px;" />
+                </div>
+                <div>
+                  <label class="field-label">Użytkownik importu</label>
+                  <input id="folderUserInput" class="settings-input" placeholder="folder_watcher" value="folder_watcher" style="width:160px;" />
+                </div>
+                <div>
+                  <label class="field-label">Aktywny</label>
+                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:7px 0;">
+                    <input type="checkbox" id="folderActiveInput" checked style="width:16px;height:16px;" />
+                    <span class="muted">Tak</span>
+                  </label>
+                </div>
+                <button class="btn-main" id="folderAddBtn">+ Dodaj</button>
+                <div class="muted" id="folderAddMsg" style="align-self:center;"></div>
+              </div>
+            </div>
+            <div class="watcher-card-body" style="padding:0;">
+              <div class="table-wrap" style="border:none;border-radius:0;max-height:none;">
+                <table id="foldersTable">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Ścieżka</th>
+                      <th>Aktywny</th>
+                      <th>Interwał (s)</th>
+                      <th>Użytkownik</th>
+                      <th>Ostatni skan</th>
+                      <th>Wykryte</th>
+                      <th>Zaimportowane</th>
+                      <th>Ostatni błąd</th>
+                      <th>Akcja</th>
+                    </tr>
+                  </thead>
+                  <tbody id="foldersBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ── VIEW: Wszystkie dane ────────────── -->
+      <div class="view" id="viewAllData">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">Wszystkie zaimportowane dane</h1>
+            <p class="view-sub">Poprawne rekordy ze wszystkich importów</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <input id="allDataSearch" placeholder="Szukaj external_id / product_code…" style="min-width:220px;" />
+            <button class="btn-main" id="allDataRefreshBtn">Odśwież</button>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+          <div class="list-controls">
+            <div class="pager">
+              <span class="muted" id="allDataMeta"></span>
+              <div style="display:flex;gap:6px;">
+                <button class="btn-muted" id="allDataPrevBtn">‹ Poprzednia</button>
+                <button class="btn-muted" id="allDataNextBtn">Następna ›</button>
+              </div>
+            </div>
+          </div>
+          <div class="table-wrap" style="flex:1;border-radius:0;border:none;max-height:none;">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Import #</th>
+                  <th>external_id</th>
+                  <th>product_code</th>
+                  <th>quantity</th>
+                  <th>unit</th>
+                  <th>planned_date</th>
+                  <th>comment</th>
+                  <th>imported_at</th>
+                </tr>
+              </thead>
+              <tbody id="allDataBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── VIEW: Jednostki ────────────────── -->
+      <div class="view" id="viewUnits">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">Jednostki (UNIT)</h1>
+            <p class="view-sub">Słownik dozwolonych jednostek importu</p>
+          </div>
+          <button class="btn-main" id="unitsRefreshBtn">Odśwież</button>
+        </div>
+        <div class="watcher-layout">
+
+          <div class="watcher-card">
+            <div class="watcher-card-header">
+              <h3 class="section-heading">Dodaj jednostkę</h3>
+            </div>
+            <div class="watcher-card-body">
+              <div class="settings-form" style="flex-direction:row;align-items:flex-end;gap:10px;flex-wrap:wrap;max-width:none;">
+                <div>
+                  <label class="field-label">Kod (unit_code)</label>
+                  <input id="unitCodeInput" class="settings-input" placeholder="np. szt" style="width:130px;" />
+                </div>
+                <div>
+                  <label class="field-label">Opis</label>
+                  <input id="unitDescInput" class="settings-input" placeholder="np. Sztuki" style="width:220px;" />
+                </div>
+                <div>
+                  <label class="field-label">Aktywna</label>
+                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:7px 0;">
+                    <input type="checkbox" id="unitActiveInput" checked style="width:16px;height:16px;" />
+                    <span class="muted">Tak</span>
+                  </label>
+                </div>
+                <button class="btn-main" id="unitAddBtn" style="align-self:flex-end;">Dodaj</button>
+                <div class="muted" id="unitAddMsg" style="align-self:center;"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="watcher-card">
+            <div class="watcher-card-header">
+              <h3 class="section-heading">Lista jednostek</h3>
+            </div>
+            <div class="watcher-card-body" style="padding:0;">
+              <div class="table-wrap" style="border:none;border-radius:0;max-height:none;">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Kod</th>
+                      <th>Opis</th>
+                      <th>Aktywna</th>
+                      <th>Akcja</th>
+                    </tr>
+                  </thead>
+                  <tbody id="unitsBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ── VIEW: Logi ──────────────────────── -->
+      <div class="view" id="viewLogs">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">Logi</h1>
+            <p class="view-sub">Logi zadań Celery oraz logi dostępu do API</p>
+          </div>
+          <button class="btn-main" id="logsRefreshBtn">Odśwież</button>
+        </div>
+
+        <!-- Tab bar -->
+        <div style="display:flex;gap:6px;padding:0 0 14px 0;flex-shrink:0;">
+          <button class="btn-muted log-tab-btn active" data-tab="tabTaskLogs" style="padding:7px 18px;font-size:0.88rem;">Zadania Celery</button>
+          <button class="btn-muted log-tab-btn" data-tab="tabAccessLogs" style="padding:7px 18px;font-size:0.88rem;">Dostęp (API)</button>
+        </div>
+
+        <!-- Tab: Celery task logs -->
+        <div id="tabTaskLogs" class="log-tab-content" style="flex:1;min-height:0;display:flex;flex-direction:column;gap:10px;">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <select id="taskStatusFilter" class="settings-input" style="width:160px;">
+              <option value="">Wszystkie statusy</option>
+              <option value="STARTED">STARTED</option>
+              <option value="SUCCESS">SUCCESS</option>
+              <option value="ERROR">ERROR</option>
+            </select>
+            <input id="taskLogSearch" class="settings-input" placeholder="Szukaj po zadaniu lub użytkowniku…" style="flex:1;min-width:200px;" />
+            <span class="muted" id="taskLogMeta"></span>
+          </div>
+          <div class="table-wrap" style="flex:1;min-height:0;">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:50px;">ID</th>
+                  <th>Zadanie</th>
+                  <th style="width:100px;">Status</th>
+                  <th>Wiadomość</th>
+                  <th style="width:130px;">Użytkownik</th>
+                  <th style="width:160px;">Czas</th>
+                </tr>
+              </thead>
+              <tbody id="taskLogsBody"></tbody>
+            </table>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+            <button class="btn-muted" id="taskLogPrevBtn" disabled>&#8592; Poprzednia</button>
+            <button class="btn-muted" id="taskLogNextBtn" disabled>Następna &#8594;</button>
+          </div>
+        </div>
+
+        <!-- Tab: Access logs -->
+        <div id="tabAccessLogs" class="log-tab-content" style="flex:1;min-height:0;display:none;flex-direction:column;gap:10px;">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <input id="accessLogSearch" class="settings-input" placeholder="Szukaj po metodzie, ścieżce lub użytkowniku…" style="flex:1;min-width:200px;" />
+            <span class="muted" id="accessLogMeta"></span>
+          </div>
+          <div class="table-wrap" style="flex:1;min-height:0;">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:50px;">ID</th>
+                  <th style="width:80px;">Metoda</th>
+                  <th>Ścieżka</th>
+                  <th style="width:80px;">Kod</th>
+                  <th style="width:130px;">Użytkownik</th>
+                  <th style="width:140px;">IP</th>
+                  <th style="width:160px;">Czas</th>
+                </tr>
+              </thead>
+              <tbody id="accessLogsBody"></tbody>
+            </table>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+            <button class="btn-muted" id="accessLogPrevBtn" disabled>&#8592; Poprzednia</button>
+            <button class="btn-muted" id="accessLogNextBtn" disabled>Następna &#8594;</button>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+  </div>
+
+  <script>
+    // ─── STATE ────────────────────────────────────────────
+    const state = {
+      token: localStorage.getItem("imports_panel_token") || "",
+      username: localStorage.getItem("imports_panel_user") || "",
+      role: { name: null, power: -1 },
+      imports: [], selectedImportId: null,
+      importsPage: 0, importsLimit: 100, importsTotal: 0, importsPages: 0,
+      details: null, okRows: [], errRows: [],
+      watcherData: null,
+      allDataPage: 0, allDataLimit: 100, allDataTotal: 0, allDataPages: 0,
+      allDataRows: [],
+      units: [],
+      taskLogsPage: 0, taskLogsLimit: 50, taskLogsTotal: 0, taskLogsPages: 0,
+      accessLogsPage: 0, accessLogsLimit: 50, accessLogsTotal: 0, accessLogsPages: 0,
+      activeLogTab: "tabTaskLogs"
+    };
+
+    // ─── ELEMENTS ─────────────────────────────────────────
+    const el = {
+      loginUser: document.getElementById("loginUser"),
+      loginPass: document.getElementById("loginPass"),
+      loginBtn: document.getElementById("loginBtn"),
+      logoutBtn: document.getElementById("logoutBtn"),
+      loginMsg: document.getElementById("loginMsg"),
+      authUser: document.getElementById("authUser"),
+      footerLoggedIn: document.getElementById("footerLoggedIn"),
+      footerLoggedOut: document.getElementById("footerLoggedOut"),
+      refreshBtn: document.getElementById("refreshBtn"),
+      importSearch: document.getElementById("importSearch"),
+      statusFilter: document.getElementById("statusFilter"),
+      prevPageBtn: document.getElementById("prevPageBtn"),
+      nextPageBtn: document.getElementById("nextPageBtn"),
+      importMeta: document.getElementById("importMeta"),
+      importsBody: document.querySelector("#importsTable tbody"),
+      detailsSubtitle: document.getElementById("detailsSubtitle"),
+      detailsMetrics: document.getElementById("detailsMetrics"),
+      recordSearch: document.getElementById("recordSearch"),
+      reloadDetailsBtn: document.getElementById("reloadDetailsBtn"),
+      okBody: document.querySelector("#okTable tbody"),
+      errBody: document.querySelector("#errTable tbody"),
+      errorPreview: document.getElementById("errorPreview"),
+      uploadInput: document.getElementById("uploadInput"),
+      uploadPickBtn: document.getElementById("uploadPickBtn"),
+      uploadFilename: document.getElementById("uploadFilename"),
+      uploadSubmitBtn: document.getElementById("uploadSubmitBtn"),
+      uploadResult: document.getElementById("uploadResult"),
+      watcherRefreshBtn: document.getElementById("watcherRefreshBtn"),
+      watcherSaveBtn: document.getElementById("watcherSaveBtn"),
+      watchEnabledToggle: document.getElementById("watchEnabledToggle"),
+      watchEnabledLabel: document.getElementById("watchEnabledLabel"),
+      watchIntervalInput: document.getElementById("watchIntervalInput"),
+      watcherRuntime: document.getElementById("watcherRuntime"),
+      foldersBody: document.getElementById("foldersBody"),
+      folderPathInput: document.getElementById("folderPathInput"),
+      folderIntervalInput: document.getElementById("folderIntervalInput"),
+      folderUserInput: document.getElementById("folderUserInput"),
+      folderActiveInput: document.getElementById("folderActiveInput"),
+      folderAddBtn: document.getElementById("folderAddBtn"),
+      folderAddMsg: document.getElementById("folderAddMsg"),
+      allDataSearch: document.getElementById("allDataSearch"),
+      allDataRefreshBtn: document.getElementById("allDataRefreshBtn"),
+      allDataMeta: document.getElementById("allDataMeta"),
+      allDataPrevBtn: document.getElementById("allDataPrevBtn"),
+      allDataNextBtn: document.getElementById("allDataNextBtn"),
+      allDataBody: document.getElementById("allDataBody"),
+      unitsRefreshBtn: document.getElementById("unitsRefreshBtn"),
+      unitCodeInput: document.getElementById("unitCodeInput"),
+      unitDescInput: document.getElementById("unitDescInput"),
+      unitActiveInput: document.getElementById("unitActiveInput"),
+      unitAddBtn: document.getElementById("unitAddBtn"),
+      unitAddMsg: document.getElementById("unitAddMsg"),
+      unitsBody: document.getElementById("unitsBody"),
+      hamburgerBtn: document.getElementById("hamburgerBtn"),
+      logsRefreshBtn: document.getElementById("logsRefreshBtn"),
+      taskStatusFilter: document.getElementById("taskStatusFilter"),
+      taskLogSearch: document.getElementById("taskLogSearch"),
+      taskLogMeta: document.getElementById("taskLogMeta"),
+      taskLogsBody: document.getElementById("taskLogsBody"),
+      taskLogPrevBtn: document.getElementById("taskLogPrevBtn"),
+      taskLogNextBtn: document.getElementById("taskLogNextBtn"),
+      accessLogSearch: document.getElementById("accessLogSearch"),
+      accessLogMeta: document.getElementById("accessLogMeta"),
+      accessLogsBody: document.getElementById("accessLogsBody"),
+      accessLogPrevBtn: document.getElementById("accessLogPrevBtn"),
+      accessLogNextBtn: document.getElementById("accessLogNextBtn")
+    };
+
+    // ─── AUTH ─────────────────────────────────────────────
+    function authHeaders() {
+      return state.token ? { Authorization: `Bearer ${state.token}` } : {};
+    }
+
+    function setAuth(token, username) {
+      state.token = token || "";
+      state.username = username || "";
+      if (state.token) {
+        localStorage.setItem("imports_panel_token", state.token);
+        localStorage.setItem("imports_panel_user", state.username);
+        el.footerLoggedIn.style.display = "flex";
+        el.footerLoggedOut.style.display = "none";
+        el.authUser.textContent = state.username || "Zalogowano";
+        el.loginMsg.textContent = "";
+        fetchMe();
+      } else {
+        localStorage.removeItem("imports_panel_token");
+        localStorage.removeItem("imports_panel_user");
+        state.role = { name: null, power: -1 };
+        el.footerLoggedIn.style.display = "none";
+        el.footerLoggedOut.style.display = "flex";
+        renderNavVisibility();
+      }
+    }
+
+    async function fetchMe() {
+      try {
+        const me = await api("/me");
+        state.role = { name: me.role, power: me.power ?? -1 };
+        el.authUser.textContent = `${state.username} (${me.role})`;
+      } catch {
+        state.role = { name: null, power: -1 };
+      }
+      renderNavVisibility();
+    }
+
+    function renderNavVisibility() {
+      const power = state.role.power;
+      document.querySelectorAll(".nav-item[data-min-role]").forEach(btn => {
+        const minRole = parseInt(btn.dataset.minRole, 10);
+        const visible = state.token && power >= minRole;
+        btn.style.display = visible ? "" : "none";
+        // If the active view is now hidden, fall back to viewImports
+        if (!visible && btn.classList.contains("active")) {
+          switchView("viewImports");
+        }
+      });
+    }
+
+    function clearAllViews() {
+      state.imports = [];
+      state.selectedImportId = null;
+      state.importsPage = 0;
+      state.importsTotal = 0;
+      state.importsPages = 0;
+      state.details = null;
+      state.okRows = [];
+      state.errRows = [];
+
+      state.watcherData = null;
+
+      state.allDataPage = 0;
+      state.allDataTotal = 0;
+      state.allDataPages = 0;
+      state.allDataRows = [];
+
+      state.units = [];
+
+      state.taskLogsPage = 0;
+      state.taskLogsTotal = 0;
+      state.taskLogsPages = 0;
+      state.accessLogsPage = 0;
+      state.accessLogsTotal = 0;
+      state.accessLogsPages = 0;
+      state.activeLogTab = "tabTaskLogs";
+
+      if (el.importSearch) el.importSearch.value = "";
+      if (el.recordSearch) el.recordSearch.value = "";
+      if (el.allDataSearch) el.allDataSearch.value = "";
+      if (el.taskLogSearch) el.taskLogSearch.value = "";
+      if (el.taskStatusFilter) el.taskStatusFilter.value = "";
+      if (el.accessLogSearch) el.accessLogSearch.value = "";
+
+      el.importMeta.textContent = "";
+      renderImports();
+      renderDetails();
+
+      el.watcherRuntime.innerHTML = '<div class="muted">Zaloguj się, aby zobaczyć dane.</div>';
+      el.foldersBody.innerHTML = '<tr><td colspan="10" class="muted">Brak danych.</td></tr>';
+
+      el.allDataMeta.textContent = "";
+      el.allDataBody.innerHTML = '<tr><td colspan="9" class="muted">Zaloguj się, aby zobaczyć dane.</td></tr>';
+      el.allDataPrevBtn.disabled = true;
+      el.allDataNextBtn.disabled = true;
+
+      el.unitsBody.innerHTML = '<tr><td colspan="4" class="muted">Zaloguj się, aby zobaczyć dane.</td></tr>';
+      el.unitAddMsg.textContent = "";
+
+      el.taskLogMeta.textContent = "";
+      el.taskLogsBody.innerHTML = '<tr><td colspan="6" class="muted">Zaloguj się, aby zobaczyć logi.</td></tr>';
+      el.taskLogPrevBtn.disabled = true;
+      el.taskLogNextBtn.disabled = true;
+
+      el.accessLogMeta.textContent = "";
+      el.accessLogsBody.innerHTML = '<tr><td colspan="7" class="muted">Zaloguj się, aby zobaczyć logi.</td></tr>';
+      el.accessLogPrevBtn.disabled = true;
+      el.accessLogNextBtn.disabled = true;
+
+      document.querySelectorAll(".log-tab-btn").forEach(b => b.classList.remove("active"));
+      const taskTabBtn = document.querySelector('.log-tab-btn[data-tab="tabTaskLogs"]');
+      if (taskTabBtn) taskTabBtn.classList.add("active");
+      document.getElementById("tabTaskLogs").style.display = "flex";
+      document.getElementById("tabAccessLogs").style.display = "none";
+
+      switchView("viewImports");
+    }
+
+    async function login() {
+      const body = new URLSearchParams();
+      body.set("username", el.loginUser.value.trim());
+      body.set("password", el.loginPass.value);
+      const response = await fetch("/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || "Błąd logowania");
+      }
+      const data = await response.json();
+      setAuth(data.access_token, el.loginUser.value.trim());
+    }
+
+    // ─── API ──────────────────────────────────────────────
+    async function api(path, opts = {}) {
+      const response = await fetch(path, {
+        ...opts,
+        headers: { ...(opts.headers || {}), ...authHeaders() }
+      });
+      if (response.status === 401) {
+        setAuth("", "");
+        clearAllViews();
+        throw new Error("Unauthorized");
+      }
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || `HTTP ${response.status}`);
+      }
+      return response.json();
+    }
+
+    // ─── NAVIGATION ───────────────────────────────────────
+    function switchView(viewId) {
+      document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+      document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+      document.getElementById(viewId).classList.add("active");
+      const navBtn = document.querySelector(`[data-view="${viewId}"]`);
+      if (navBtn) navBtn.classList.add("active");
+      if (viewId === "viewImports" && state.token && !state.imports.length) loadImports();
+      if (viewId === "viewWatcher" && state.token) loadWatcher();
+      if (viewId === "viewAllData" && state.token) loadAllData();
+      if (viewId === "viewUnits" && state.token) loadUnits();
+      if (viewId === "viewLogs" && state.token) {
+        if (state.activeLogTab === "tabTaskLogs") loadTaskLogs();
+        else loadAccessLogs();
+      }
+    }
+
+    // ─── IMPORTS LIST ─────────────────────────────────────
+    function importStatus(row) {
+      return Number(row.error_rows || 0) > 0 ? "WITH_ERRORS" : "COMPLETED";
+    }
+
+    function statusPill(status) {
+      return status === "WITH_ERRORS"
+        ? '<span class="pill danger">Błędy</span>'
+        : '<span class="pill ok">OK</span>';
+    }
+
+    async function loadImports() {
+      const q = new URLSearchParams({ page: String(state.importsPage), limit: String(state.importsLimit) });
+      const data = await api(`/imports?${q}`);
+      state.imports = data.data || [];
+      state.importsTotal = data.total || 0;
+      state.importsPages = data.pages || 0;
+      renderImports();
+    }
+
+    function renderImports() {
+      const txt = el.importSearch.value.trim().toLowerCase();
+      const status = el.statusFilter.value;
+      const rows = state.imports.filter(r => {
+        const m = !txt || String(r.filename || "").toLowerCase().includes(txt) || String(r.id || "").includes(txt);
+        return m && (status === "ALL" || status === importStatus(r));
+      });
+
+      el.importMeta.textContent = `Strona ${state.importsPage + 1} / ${Math.max(state.importsPages, 1)} · Łącznie: ${state.importsTotal}`;
+      el.prevPageBtn.disabled = state.importsPage <= 0;
+      el.nextPageBtn.disabled = state.importsPage + 1 >= state.importsPages;
+
+      el.importsBody.innerHTML = "";
+      for (const row of rows) {
+        const tr = document.createElement("tr");
+        tr.className = "selectable" + (state.selectedImportId === row.id ? " active" : "");
+        tr.innerHTML = `
+          <td>${row.id}</td>
+          <td>${row.filename}</td>
+          <td>${statusPill(importStatus(row))}</td>
+          <td>${row.ok_rows ?? 0}</td>
+          <td>${row.error_rows ?? 0}</td>
+          <td>${(row.processed_at || "-").replace("T", " ").slice(0, 19)}</td>`;
+        tr.addEventListener("click", async () => {
+          state.selectedImportId = row.id;
+          await loadDetails(row.id);
+          renderImports();
+        });
+        el.importsBody.appendChild(tr);
+      }
+      if (!rows.length) {
+        el.importsBody.innerHTML = '<tr><td colspan="6" class="muted">Brak danych dla aktualnego filtra.</td></tr>';
+      }
+    }
+
+    // ─── IMPORT DETAILS ───────────────────────────────────
+    function renderDetails() {
+      if (!state.details) {
+        el.detailsSubtitle.textContent = "Wybierz import z listy";
+        el.detailsMetrics.innerHTML = "";
+        el.okBody.innerHTML = "";
+        el.errBody.innerHTML = "";
+        return;
+      }
+
+      el.detailsSubtitle.textContent = `Import #${state.details.id} · ${state.details.filename}`;
+      const st = Number(state.details.error_rows || 0) > 0 ? "WITH_ERRORS" : "COMPLETED";
+      el.detailsMetrics.innerHTML = `
+        <div class="metric"><div class="k">Status</div><div class="v">${statusPill(st)}</div></div>
+        <div class="metric"><div class="k">Total</div><div class="v">${state.details.total_rows ?? 0}</div></div>
+        <div class="metric"><div class="k">OK</div><div class="v">${state.details.ok_rows ?? 0}</div></div>
+        <div class="metric"><div class="k">Błędy</div><div class="v">${state.details.error_rows ?? 0}</div></div>`;
+
+      const q = el.recordSearch.value.trim().toLowerCase();
+      const ok = state.okRows.filter(r => !q
+        || String(r.external_id || "").toLowerCase().includes(q)
+        || String(r.product_code || "").toLowerCase().includes(q));
+      const err = state.errRows.filter(r => !q
+        || String(r.external_id || "").toLowerCase().includes(q)
+        || String(r.product_code || "").toLowerCase().includes(q));
+
+      el.okBody.innerHTML = "";
+      for (const r of ok) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${r.external_id || "-"}</td><td>${r.product_code || "-"}</td><td>${r.quantity || "-"}</td><td>${r.unit || "-"}</td><td>${r.planned_date || "-"}</td>`;
+        el.okBody.appendChild(tr);
+      }
+      if (!ok.length) el.okBody.innerHTML = '<tr><td colspan="5" class="muted">Brak rekordów.</td></tr>';
+
+      el.errBody.innerHTML = "";
+      for (const r of err) {
+        const isInfo = r.error_type === "INFO";
+        const tr = document.createElement("tr");
+        tr.className = "selectable" + (isInfo ? " tr-info" : "");
+        const pill = isInfo ? '<span class="pill warn">INFO</span>' : '<span class="pill danger">BŁĄD</span>';
+        tr.innerHTML = `<td>${pill}</td><td>${r.row_number || "-"}</td><td>${r.external_id || "-"}</td><td>${r.product_code || "-"}</td><td>${r.error_reason || "-"}</td>`;
+        tr.addEventListener("click", () => { el.errorPreview.textContent = r.error_reason || "Brak opisu"; });
+        el.errBody.appendChild(tr);
+      }
+      if (!err.length) el.errBody.innerHTML = '<tr><td colspan="5" class="muted">Brak błędów i ostrzeżeń.</td></tr>';
+    }
+
+    async function loadDetails(importId) {
+      state.details = await api(`/imports/${importId}`);
+      const [okData, errData] = await Promise.all([
+        api(`/imports/${importId}/data?page=0&limit=1000`),
+        api(`/imports/${importId}/errors?page=0&limit=1000`)
+      ]);
+      state.okRows = okData.data || [];
+      state.errRows = errData.data || [];
+      el.errorPreview.textContent = "Wybierz wiersz, aby zobaczyć pełną treść.";
+      renderDetails();
+    }
+
+    // ─── UPLOAD ───────────────────────────────────────────
+    function setUploadResult(msg, type) {
+      el.uploadResult.className = "upload-result" + (type ? ` ${type}` : "");
+      el.uploadResult.textContent = msg;
+    }
+
+    async function doUpload() {
+      const file = el.uploadInput.files[0];
+      if (!file) return;
+      const form = new FormData();
+      form.append("file", file);
+      el.uploadSubmitBtn.disabled = true;
+      setUploadResult("Wysyłanie…", "info");
+      try {
+        const res = await fetch("/imports", {
+          method: "POST",
+          headers: authHeaders(),
+          body: form
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setUploadResult(`✓ Import przyjęty: ${data.filename || file.name}`, "ok");
+          el.uploadInput.value = "";
+          el.uploadFilename.textContent = "Nie wybrano pliku";
+          el.uploadSubmitBtn.disabled = true;
+        } else if (res.status === 409) {
+          setUploadResult("ℹ Plik już był importowany (identyczny checksum).", "info");
+        } else {
+          setUploadResult(`Błąd: ${data.detail || JSON.stringify(data)}`, "err");
+        }
+      } catch (e) {
+        setUploadResult(`Błąd: ${e.message}`, "err");
+      } finally {
+        el.uploadSubmitBtn.disabled = false;
+      }
+    }
+
+    // ─── WATCHER ──────────────────────────────────────────
+    async function loadWatcher() {
+      try {
+        const data = await api("/imports/watcher/status");
+        state.watcherData = data;
+        renderWatcher();
+      } catch (e) {
+        el.watcherRuntime.innerHTML = `<div class="muted">Błąd: ${e.message}</div>`;
+      }
+    }
+
+    function renderWatcher() {
+      const d = state.watcherData;
+      if (!d) return;
+
+      el.watchEnabledToggle.checked = !!d.settings?.watch_enabled;
+      el.watchEnabledLabel.textContent = d.settings?.watch_enabled ? "Włączona" : "Wyłączona";
+      el.watchIntervalInput.value = d.settings?.scheduler_interval_seconds ?? 5;
+
+      const rt = d.runtime || {};
+      const dateKeys = ["started_at", "last_loop_at"];
+      el.watcherRuntime.innerHTML = Object.entries(rt)
+        .map(([k, v]) => {
+          let display;
+          if (v === null || v === undefined) display = "—";
+          else if (v === true) display = "✓ tak";
+          else if (v === false) display = "✗ nie";
+          else if (dateKeys.includes(k) && typeof v === "string") display = v.replace("T", " ").slice(0, 19);
+          else display = v;
+          return `<div class="runtime-item"><div class="runtime-key">${k}</div><div class="runtime-val">${display}</div></div>`;
+        })
+        .join("") || '<div class="muted">Brak danych runtime.</div>';
+
+      el.foldersBody.innerHTML = "";
+      if (!(d.folders?.length)) {
+        el.foldersBody.innerHTML = '<tr><td colspan="10" class="muted">Brak skonfigurowanych katalogów.</td></tr>';
+      } else {
+        for (const f of d.folders) {
+          const tr = document.createElement("tr");
+          tr.dataset.folderId = f.id;
+          tr.innerHTML = `
+            <td>${f.id}</td>
+            <td style="max-width:260px;word-break:break-all;">${f.directory_path}</td>
+            <td>
+              <input type="checkbox" class="folder-toggle" ${f.is_active ? "checked" : ""} style="width:15px;height:15px;" />
+            </td>
+            <td>
+              <input type="number" class="folder-interval-input" value="${f.interval_seconds ?? 60}" min="1"
+                style="width:70px;padding:2px 4px;border:1px solid #ccc;border-radius:4px;" />
+            </td>
+            <td>
+              <input type="text" class="folder-user-input" value="${f.import_user || ""}"
+                style="width:130px;padding:2px 4px;border:1px solid #ccc;border-radius:4px;" />
+            </td>
+            <td>${f.last_scan_at ? f.last_scan_at.replace("T", " ").slice(0, 19) : "—"}</td>
+            <td>${f.last_scan_file_count ?? "—"}</td>
+            <td style="max-width:180px;word-break:break-all;">${f.last_imported_files || "—"}</td>
+            <td style="max-width:200px;word-break:break-all;color:#b03037;">${f.last_error || "—"}</td>
+            <td style="white-space:nowrap;">
+              <button class="folder-save-btn btn-sm" data-folder-id="${f.id}"
+                style="padding:3px 10px;font-size:0.78rem;margin-right:4px;">Zapisz</button>
+              <button class="folder-delete-btn btn-sm btn-danger" data-folder-id="${f.id}"
+                style="padding:3px 10px;font-size:0.78rem;">Usuń</button>
+            </td>`;
+          el.foldersBody.appendChild(tr);
+        }
+      }
+    }
+
+    async function saveWatcherSettings() {
+      const data = {
+        watch_enabled: el.watchEnabledToggle.checked,
+        scheduler_interval_seconds: parseInt(el.watchIntervalInput.value, 10)
+      };
+      if (!Number.isFinite(data.scheduler_interval_seconds) || data.scheduler_interval_seconds < 1) {
+        alert("Interwał musi być liczbą całkowitą ≥ 1");
+        return;
+      }
+      el.watcherSaveBtn.disabled = true;
+      try {
+        await api("/imports/watcher/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data)
+        });
+        const orig = el.watcherSaveBtn.textContent;
+        el.watcherSaveBtn.textContent = "✓ Zapisano";
+        setTimeout(() => { el.watcherSaveBtn.textContent = orig; }, 2000);
+        await loadWatcher();
+      } catch (e) {
+        alert(`Błąd zapisu: ${e.message}`);
+      } finally {
+        el.watcherSaveBtn.disabled = false;
+      }
+    }
+
+    async function addFolder() {
+      const path = el.folderPathInput.value.trim();
+      if (!path) { el.folderAddMsg.textContent = "Ścieżka jest wymagana."; return; }
+      const interval = parseInt(el.folderIntervalInput.value, 10);
+      if (!Number.isFinite(interval) || interval < 1) { el.folderAddMsg.textContent = "Interwał musi być ≥ 1."; return; }
+      el.folderAddMsg.textContent = "";
+      el.folderAddBtn.disabled = true;
+      try {
+        await api("/imports/watcher/folders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            directory_path: path,
+            interval_seconds: interval,
+            import_user: el.folderUserInput.value.trim() || "folder_watcher",
+            is_active: el.folderActiveInput.checked
+          })
+        });
+        el.folderPathInput.value = "";
+        el.folderAddMsg.textContent = `✓ Dodano: ${path}`;
+        await loadWatcher();
+      } catch (e) {
+        el.folderAddMsg.textContent = `Błąd: ${e.message}`;
+      } finally {
+        el.folderAddBtn.disabled = false;
+      }
+    }
+
+    async function deleteFolder(folderId) {
+      if (!confirm(`Usunąć folder #${folderId}?`)) return;
+      try {
+        await api(`/imports/watcher/folders/${folderId}`, { method: "DELETE" });
+        await loadWatcher();
+      } catch (e) {
+        alert(`Błąd usuwania: ${e.message}`);
+      }
+    }
+
+    async function saveFolder(folderId) {
+      const row = el.foldersBody.querySelector(`tr[data-folder-id="${folderId}"]`);
+      if (!row) return;
+      const isActive = row.querySelector(".folder-toggle").checked;
+      const interval = parseInt(row.querySelector(".folder-interval-input").value, 10);
+      const importUser = row.querySelector(".folder-user-input").value.trim() || "folder_watcher";
+      if (!Number.isFinite(interval) || interval < 1) { alert("Interwał musi być ≥ 1"); return; }
+      const btn = row.querySelector(".folder-save-btn");
+      btn.disabled = true;
+      try {
+        await api(`/imports/watcher/folders/${folderId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ is_active: isActive, interval_seconds: interval, import_user: importUser })
+        });
+        const orig = btn.textContent;
+        btn.textContent = "✓";
+        setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1800);
+        await loadWatcher();
+      } catch (e) {
+        alert(`Błąd zapisu: ${e.message}`);
+        btn.disabled = false;
+      }
+    }
+
+    async function toggleFolder(folderId, isActive) {
+      try {
+        await api(`/imports/watcher/folders/${folderId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ is_active: isActive })
+        });
+        await loadWatcher();
+      } catch (e) {
+        alert(`Błąd: ${e.message}`);
+      }
+    }
+
+    // ─── EVENTS ───────────────────────────────────────────
+    function bindEvents() {
+      document.querySelectorAll(".nav-item").forEach(btn => {
+        btn.addEventListener("click", () => switchView(btn.dataset.view));
+      });
+
+      el.loginBtn.addEventListener("click", async () => {
+        el.loginMsg.textContent = "";
+        el.loginBtn.disabled = true;
+        try {
+          await login();
+          await loadImports();
+        } catch (e) {
+          el.loginMsg.textContent = e.message;
+        } finally {
+          el.loginBtn.disabled = false;
+        }
+      });
+
+      [el.loginUser, el.loginPass].forEach(inp => {
+        inp.addEventListener("keydown", e => { if (e.key === "Enter") el.loginBtn.click(); });
+      });
+
+      el.logoutBtn.addEventListener("click", () => {
+        setAuth("", "");
+        clearAllViews();
+      });
+
+      el.refreshBtn.addEventListener("click", async () => {
+        try {
+          await loadImports();
+          if (state.selectedImportId) await loadDetails(state.selectedImportId);
+        } catch (e) { el.importMeta.textContent = `Błąd: ${e.message}`; }
+      });
+
+      el.statusFilter.addEventListener("change", renderImports);
+      el.importSearch.addEventListener("input", renderImports);
+      el.recordSearch.addEventListener("input", renderDetails);
+
+      el.prevPageBtn.addEventListener("click", async () => {
+        if (state.importsPage <= 0) return;
+        state.importsPage -= 1; await loadImports();
+      });
+      el.nextPageBtn.addEventListener("click", async () => {
+        if (state.importsPage + 1 >= state.importsPages) return;
+        state.importsPage += 1; await loadImports();
+      });
+
+      el.reloadDetailsBtn.addEventListener("click", async () => {
+        if (state.selectedImportId) await loadDetails(state.selectedImportId);
+      });
+
+      el.uploadPickBtn.addEventListener("click", () => el.uploadInput.click());
+      el.uploadInput.addEventListener("change", () => {
+        const f = el.uploadInput.files[0];
+        if (f) {
+          el.uploadFilename.textContent = f.name;
+          el.uploadSubmitBtn.disabled = false;
+          setUploadResult("");
+        }
+      });
+      el.uploadSubmitBtn.addEventListener("click", doUpload);
+
+      el.watcherRefreshBtn.addEventListener("click", loadWatcher);
+      el.watcherSaveBtn.addEventListener("click", saveWatcherSettings);
+      el.watchEnabledToggle.addEventListener("change", () => {
+        el.watchEnabledLabel.textContent = el.watchEnabledToggle.checked ? "Włączona" : "Wyłączona";
+      });
+      el.foldersBody.addEventListener("change", e => {
+        // live toggle is now handled via per-row Zapisz button — no auto-save on checkbox change
+      });
+      el.foldersBody.addEventListener("click", e => {
+        const saveBtn = e.target.closest(".folder-save-btn");
+        if (saveBtn) { saveFolder(parseInt(saveBtn.dataset.folderId, 10)); return; }
+        const delBtn = e.target.closest(".folder-delete-btn");
+        if (delBtn) deleteFolder(parseInt(delBtn.dataset.folderId, 10));
+      });
+      el.folderAddBtn.addEventListener("click", addFolder);
+
+      // All data
+      el.allDataRefreshBtn.addEventListener("click", () => { state.allDataPage = 0; loadAllData(); });
+      el.allDataSearch.addEventListener("input", () => { state.allDataPage = 0; loadAllData(); });
+      el.allDataPrevBtn.addEventListener("click", () => { if (state.allDataPage > 0) { state.allDataPage -= 1; loadAllData(); } });
+      el.allDataNextBtn.addEventListener("click", () => { if (state.allDataPage + 1 < state.allDataPages) { state.allDataPage += 1; loadAllData(); } });
+
+      // Units
+      el.unitsRefreshBtn.addEventListener("click", loadUnits);
+      el.unitAddBtn.addEventListener("click", addUnit);
+      el.unitsBody.addEventListener("click", e => {
+        const btn = e.target.closest(".unit-save-btn");
+        if (btn) saveUnit(btn.dataset.code);
+        const delBtn = e.target.closest(".unit-delete-btn");
+        if (delBtn) deleteUnit(delBtn.dataset.code);
+      });
+
+      // Hamburger
+      el.hamburgerBtn.addEventListener("click", () => {
+        document.querySelector(".sidebar").classList.toggle("collapsed");
+      });
+
+      // Logs
+      el.logsRefreshBtn.addEventListener("click", () => {
+        if (state.activeLogTab === "tabTaskLogs") { state.taskLogsPage = 0; loadTaskLogs(); }
+        else { state.accessLogsPage = 0; loadAccessLogs(); }
+      });
+      document.querySelectorAll(".log-tab-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".log-tab-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          state.activeLogTab = btn.dataset.tab;
+          document.querySelectorAll(".log-tab-content").forEach(t => t.style.display = "none");
+          const panel = document.getElementById(btn.dataset.tab);
+          panel.style.display = "flex";
+          if (btn.dataset.tab === "tabTaskLogs") { state.taskLogsPage = 0; loadTaskLogs(); }
+          else { state.accessLogsPage = 0; loadAccessLogs(); }
+        });
+      });
+      el.taskStatusFilter.addEventListener("change", () => { state.taskLogsPage = 0; loadTaskLogs(); });
+      el.taskLogSearch.addEventListener("input", () => { state.taskLogsPage = 0; loadTaskLogs(); });
+      el.taskLogPrevBtn.addEventListener("click", () => { if (state.taskLogsPage > 0) { state.taskLogsPage -= 1; loadTaskLogs(); } });
+      el.taskLogNextBtn.addEventListener("click", () => { if (state.taskLogsPage + 1 < state.taskLogsPages) { state.taskLogsPage += 1; loadTaskLogs(); } });
+      el.accessLogSearch.addEventListener("input", () => { state.accessLogsPage = 0; loadAccessLogs(); });
+      el.accessLogPrevBtn.addEventListener("click", () => { if (state.accessLogsPage > 0) { state.accessLogsPage -= 1; loadAccessLogs(); } });
+      el.accessLogNextBtn.addEventListener("click", () => { if (state.accessLogsPage + 1 < state.accessLogsPages) { state.accessLogsPage += 1; loadAccessLogs(); } });
+    }
+
+    // ─── ALL DATA ─────────────────────────────────────────
+    async function loadAllData() {
+      const q = new URLSearchParams({ page: String(state.allDataPage), limit: String(state.allDataLimit) });
+      const txt = el.allDataSearch.value.trim();
+      if (txt) { q.set("external_id__like", `*${txt}*`); }
+      try {
+        const data = await api(`/imports_data?${q}`);
+        state.allDataRows = data.data || [];
+        state.allDataTotal = data.total || 0;
+        state.allDataPages = data.pages || 0;
+        renderAllData();
+      } catch (e) {
+        el.allDataBody.innerHTML = `<tr><td colspan="9" class="muted">Błąd: ${e.message}</td></tr>`;
+      }
+    }
+
+    function renderAllData() {
+      el.allDataMeta.textContent = `Strona ${state.allDataPage + 1} / ${Math.max(state.allDataPages, 1)} · Łącznie: ${state.allDataTotal}`;
+      el.allDataPrevBtn.disabled = state.allDataPage <= 0;
+      el.allDataNextBtn.disabled = state.allDataPage + 1 >= state.allDataPages;
+      el.allDataBody.innerHTML = "";
+      for (const r of state.allDataRows) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${r.id}</td>
+          <td>${r.import_file_id}</td>
+          <td>${r.external_id || "-"}</td>
+          <td>${r.product_code || "-"}</td>
+          <td>${r.quantity ?? "-"}</td>
+          <td>${r.unit || "-"}</td>
+          <td>${r.planned_date || "-"}</td>
+          <td style="max-width:160px;word-break:break-word">${r.comment || ""}</td>
+          <td>${(r.imported_at || "-").replace("T", " ").slice(0, 19)}</td>`;
+        el.allDataBody.appendChild(tr);
+      }
+      if (!state.allDataRows.length) {
+        el.allDataBody.innerHTML = '<tr><td colspan="9" class="muted">Brak rekordów.</td></tr>';
+      }
+    }
+
+    // ─── UNITS ────────────────────────────────────────────
+    async function loadUnits() {
+      try {
+        const data = await api("/import_units?limit=1000");
+        state.units = data.data || [];
+        renderUnits();
+      } catch (e) {
+        el.unitsBody.innerHTML = `<tr><td colspan="4" class="muted">Błąd: ${e.message}</td></tr>`;
+      }
+    }
+
+    function renderUnits() {
+      el.unitsBody.innerHTML = "";
+      for (const u of state.units) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><strong>${u.unit_code}</strong></td>
+          <td>
+            <input class="unit-desc-input settings-input" data-code="${u.unit_code}" value="${(u.description || "").replace(/"/g, '&quot;')}" style="width:100%;min-width:140px;" />
+          </td>
+          <td>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" class="unit-active-chk" data-code="${u.unit_code}" ${u.is_active ? "checked" : ""} style="width:15px;height:15px;" />
+              <span>${u.is_active ? "Tak" : "Nie"}</span>
+            </label>
+          </td>
+          <td>
+            <button class="btn-muted unit-save-btn" data-code="${u.unit_code}" style="padding:5px 12px;font-size:0.82rem;">Zapisz</button>
+            <button class="btn-muted unit-delete-btn" data-code="${u.unit_code}" style="padding:5px 12px;font-size:0.82rem;margin-left:6px;background:#f7d9dc;color:#8a1f2c;">Usuń</button>
+          </td>`;
+        el.unitsBody.appendChild(tr);
+      }
+      if (!state.units.length) {
+        el.unitsBody.innerHTML = '<tr><td colspan="4" class="muted">Brak jednostek.</td></tr>';
+      }
+    }
+
+    async function saveUnit(unitCode) {
+      const row = el.unitsBody.querySelector(`[data-code="${unitCode}"]`)?.closest("tr");
+      if (!row) return;
+      const desc = row.querySelector(".unit-desc-input").value.trim();
+      const active = row.querySelector(".unit-active-chk").checked;
+      try {
+        await api(`/import_units/${encodeURIComponent(unitCode)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ description: desc, is_active: active })
+        });
+        const btn = row.querySelector(".unit-save-btn");
+        btn.textContent = "✓";
+        setTimeout(() => { btn.textContent = "Zapisz"; }, 1800);
+        await loadUnits();
+      } catch (e) {
+        el.unitAddMsg.textContent = `Błąd: ${e.message}`;
+      }
+    }
+
+    async function addUnit() {
+      const code = el.unitCodeInput.value.trim();
+      const desc = el.unitDescInput.value.trim();
+      const active = el.unitActiveInput.checked;
+      if (!code) { el.unitAddMsg.textContent = "Kod jest wymagany."; return; }
+      el.unitAddMsg.textContent = "";
+      try {
+        await api("/import_units", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ unit_code: code, description: desc, is_active: active })
+        });
+        el.unitCodeInput.value = "";
+        el.unitDescInput.value = "";
+        el.unitActiveInput.checked = true;
+        el.unitAddMsg.textContent = `✓ Dodano &ldquo;${code}&rdquo;`;
+        await loadUnits();
+      } catch (e) {
+        el.unitAddMsg.textContent = `Błąd: ${e.message}`;
+      }
+    }
+
+    async function deleteUnit(unitCode) {
+      if (!confirm(`Usunąć jednostkę ${unitCode}?`)) return;
+      try {
+        await api(`/import_units/${encodeURIComponent(unitCode)}`, {
+          method: "DELETE"
+        });
+        el.unitAddMsg.textContent = `✓ Usunięto "${unitCode}"`;
+        await loadUnits();
+      } catch (e) {
+        el.unitAddMsg.textContent = `Błąd: ${e.message}`;
+      }
+    }
+
+    // ─── LOGS ─────────────────────────────────────────────
+    async function loadTaskLogs() {
+      const q = new URLSearchParams({ page: String(state.taskLogsPage), limit: String(state.taskLogsLimit) });
+      const statusVal = el.taskStatusFilter.value;
+      const searchVal = el.taskLogSearch.value.trim();
+      if (statusVal) q.set("status", statusVal);
+      if (searchVal) q.set("search", searchVal);
+      try {
+        const data = await api(`/logs/tasks?${q}`);
+        state.taskLogsTotal = data.total || 0;
+        state.taskLogsPages = data.pages || 0;
+        renderTaskLogs(data.data || []);
+      } catch (e) {
+        el.taskLogsBody.innerHTML = `<tr><td colspan="6" class="muted">Błąd: ${e.message}</td></tr>`;
+      }
+    }
+
+    function renderTaskLogs(rows) {
+      el.taskLogMeta.textContent = `Strona ${state.taskLogsPage + 1} / ${Math.max(state.taskLogsPages, 1)} · Łącznie: ${state.taskLogsTotal}`;
+      el.taskLogPrevBtn.disabled = state.taskLogsPage <= 0;
+      el.taskLogNextBtn.disabled = state.taskLogsPage + 1 >= state.taskLogsPages;
+      el.taskLogsBody.innerHTML = "";
+      for (const r of rows) {
+        const statusCls = r.status === "SUCCESS" ? "ok" : r.status === "ERROR" ? "danger" : "info";
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${r.id}</td>
+          <td style="word-break:break-all;">${r.task_name || "-"}</td>
+          <td><span class="pill ${statusCls}">${r.status || "-"}</span></td>
+          <td style="max-width:340px;word-break:break-word;">${r.message || ""}</td>
+          <td>${r.username || "-"}</td>
+          <td>${(r.created_at || "-").replace("T", " ").slice(0, 19)}</td>`;
+        el.taskLogsBody.appendChild(tr);
+      }
+      if (!rows.length) {
+        el.taskLogsBody.innerHTML = '<tr><td colspan="6" class="muted">Brak logów.</td></tr>';
+      }
+    }
+
+    async function loadAccessLogs() {
+      const q = new URLSearchParams({ page: String(state.accessLogsPage), limit: String(state.accessLogsLimit) });
+      const searchVal = el.accessLogSearch.value.trim();
+      if (searchVal) q.set("search", searchVal);
+      try {
+        const data = await api(`/access_logs?${q}`);
+        state.accessLogsTotal = data.total || 0;
+        state.accessLogsPages = data.pages || 0;
+        renderAccessLogs(data.data || []);
+      } catch (e) {
+        el.accessLogsBody.innerHTML = `<tr><td colspan="7" class="muted">Błąd: ${e.message}</td></tr>`;
+      }
+    }
+
+    function renderAccessLogs(rows) {
+      el.accessLogMeta.textContent = `Strona ${state.accessLogsPage + 1} / ${Math.max(state.accessLogsPages, 1)} · Łącznie: ${state.accessLogsTotal}`;
+      el.accessLogPrevBtn.disabled = state.accessLogsPage <= 0;
+      el.accessLogNextBtn.disabled = state.accessLogsPage + 1 >= state.accessLogsPages;
+      el.accessLogsBody.innerHTML = "";
+      for (const r of rows) {
+        const code = r.status_code || 0;
+        const codeCls = code >= 500 ? "danger" : code >= 400 ? "warn" : "ok";
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${r.id}</td>
+          <td><code>${r.method || "-"}</code></td>
+          <td style="word-break:break-all;">${r.path || "-"}</td>
+          <td><span class="pill ${codeCls}">${r.status_code || "-"}</span></td>
+          <td>${r.username || "-"}</td>
+          <td>${r.ip_address || r.client_ip || "-"}</td>
+          <td>${(r.created_at || r.timestamp || "-").replace("T", " ").slice(0, 19)}</td>`;
+        el.accessLogsBody.appendChild(tr);
+      }
+      if (!rows.length) {
+        el.accessLogsBody.innerHTML = '<tr><td colspan="7" class="muted">Brak logów.</td></tr>';
+      }
+    }
+
+    // ─── BOOT ─────────────────────────────────────────────
+    async function boot() {
+      bindEvents();
+      if (state.token) {
+        setAuth(state.token, state.username);
+        try {
+          await loadImports();
+          return;
+        } catch {
+          setAuth("", "");
+        }
+      }
+      // Brak tokenu lub wygasły — auto-login domyślnym kontem
+      try {
+        await login();
+        await loadImports();
+      } catch {
+        // Nie udało się — panel czeka na ręczne logowanie
+      }
+    }
+
+    boot();
+  </script>
+</body>
+</html>

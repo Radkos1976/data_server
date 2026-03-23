@@ -10,7 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 
-from database import AsyncSessionLocal
+from database import get_async_session
 from auth import get_current_user, require_permission
 from access_logging import log_access
 from import_native import import_csv_native, check_file_already_processed, calculate_sha256
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/imports", tags=["imports"])
 @router.get("/watcher/status")
 async def get_watcher_status(
     current_user: str = Depends(require_permission("csv_watch_settings", "GET")),
-    session: AsyncSession = Depends(lambda: AsyncSessionLocal())
+    session: AsyncSession = Depends(get_async_session)
 ):
     """Status watchera folderów CSV oraz konfiguracja z bazy danych."""
 
@@ -98,7 +98,7 @@ async def get_watcher_status(
 async def upload_csv(
     file: UploadFile = File(...),
     current_user: str = Depends(get_current_user),
-    session: AsyncSession = Depends(lambda: AsyncSessionLocal())
+    session: AsyncSession = Depends(get_async_session)
 ):
     """
     Upload CSV do importu
@@ -184,7 +184,7 @@ async def list_imports(
     page: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: str = Depends(get_current_user),
-    session: AsyncSession = Depends(lambda: AsyncSessionLocal())
+    session: AsyncSession = Depends(get_async_session)
 ):
     """
     Lista wszystkich importów z paginacją
@@ -245,7 +245,7 @@ async def list_imports(
 async def get_import_details(
     import_id: int,
     current_user: str = Depends(get_current_user),
-    session: AsyncSession = Depends(lambda: AsyncSessionLocal())
+    session: AsyncSession = Depends(get_async_session)
 ):
     """
     Szczegóły pojedynczego importu
@@ -291,7 +291,7 @@ async def get_import_errors(
     page: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: str = Depends(get_current_user),
-    session: AsyncSession = Depends(lambda: AsyncSessionLocal())
+    session: AsyncSession = Depends(get_async_session)
 ):
     """
     Historia błędów dla danego importu
@@ -370,7 +370,7 @@ async def get_import_data(
     page: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: str = Depends(get_current_user),
-    session: AsyncSession = Depends(lambda: AsyncSessionLocal())
+    session: AsyncSession = Depends(get_async_session)
 ):
     """
     Rekordy które zostały pomyślnie zaimportowane
@@ -432,3 +432,137 @@ async def get_import_data(
         "pages": pages,
         "data": data
     }
+
+
+# ============================================================
+# WATCHER SETTINGS — synchronous management endpoints
+# ============================================================
+
+@router.put("/watcher/settings")
+async def update_watcher_settings(
+    data: dict,
+    current_user: str = Depends(require_permission("csv_watch_settings", "PUT")),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Synchronous: update global csv_watch_settings (id=1)."""
+    watch_enabled = data.get("watch_enabled")
+    interval = data.get("scheduler_interval_seconds")
+    if watch_enabled is None and interval is None:
+        raise HTTPException(status_code=400, detail="Brak pól do zaktualizowania")
+    parts = []
+    params: dict = {}
+    if watch_enabled is not None:
+        parts.append("watch_enabled = :w")
+        params["w"] = bool(watch_enabled)
+    if interval is not None:
+        try:
+            params["i"] = int(interval)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="scheduler_interval_seconds musi być liczbą całkowitą")
+        parts.append("scheduler_interval_seconds = :i")
+    parts.append("updated_at = NOW()")
+    await session.execute(
+        text(f"UPDATE csv_watch_settings SET {', '.join(parts)} WHERE id = 1"),
+        params,
+    )
+    await session.commit()
+    result = await session.execute(
+        text("SELECT id, watch_enabled, scheduler_interval_seconds, updated_at FROM csv_watch_settings WHERE id = 1")
+    )
+    row = result.fetchone()
+    return {
+        "id": row[0],
+        "watch_enabled": row[1],
+        "scheduler_interval_seconds": row[2],
+        "updated_at": row[3].isoformat() if row[3] else None,
+    }
+
+
+@router.post("/watcher/folders")
+async def add_watcher_folder(
+    data: dict,
+    current_user: str = Depends(require_permission("csv_watch_folders", "POST")),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Synchronous: add a new watched folder."""
+    directory_path = (data.get("directory_path") or "").strip()
+    if not directory_path:
+        raise HTTPException(status_code=400, detail="directory_path jest wymagane")
+    interval_seconds = int(data.get("interval_seconds", 60))
+    import_user = (data.get("import_user") or "folder_watcher").strip()
+    is_active = bool(data.get("is_active", True))
+    try:
+        result = await session.execute(
+            text("""
+                INSERT INTO csv_watch_folders
+                    (directory_path, is_active, interval_seconds, import_user)
+                VALUES (:path, :active, :interval, :user)
+                RETURNING id
+            """),
+            {"path": directory_path, "active": is_active,
+             "interval": interval_seconds, "user": import_user},
+        )
+        new_id = result.fetchone()[0]
+        await session.commit()
+    except Exception as e:
+        await session.rollback()
+        if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+            raise HTTPException(status_code=409, detail=f"Katalog już istnieje: {directory_path}")
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"id": new_id, "directory_path": directory_path,
+            "is_active": is_active, "interval_seconds": interval_seconds,
+            "import_user": import_user}
+
+
+@router.put("/watcher/folders/{folder_id}")
+async def update_watcher_folder(
+    folder_id: int,
+    data: dict,
+    current_user: str = Depends(require_permission("csv_watch_folders", "PUT")),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Synchronous: update is_active / interval_seconds / import_user for a folder."""
+    updatable = ["is_active", "interval_seconds", "import_user"]
+    parts = []
+    params: dict = {"fid": folder_id}
+    for field in updatable:
+        if field in data:
+            parts.append(f"{field} = :{field}")
+            if field == "is_active":
+                params[field] = bool(data[field])
+            elif field == "interval_seconds":
+                try:
+                    params[field] = int(data[field])
+                except (TypeError, ValueError):
+                    raise HTTPException(status_code=422, detail=f"{field} musi być liczbą całkowitą")
+            else:
+                params[field] = str(data[field]).strip()
+    if not parts:
+        raise HTTPException(status_code=400, detail="Brak pól do zaktualizowania")
+    parts.append("updated_at = NOW()")
+    updated = await session.execute(
+        text(f"UPDATE csv_watch_folders SET {', '.join(parts)} WHERE id = :fid RETURNING id"),
+        params,
+    )
+    if not updated.fetchone():
+        raise HTTPException(status_code=404, detail=f"Folder {folder_id} nie znaleziony")
+    await session.commit()
+    return {"ok": True, "id": folder_id}
+
+
+@router.delete("/watcher/folders/{folder_id}")
+async def delete_watcher_folder(
+    folder_id: int,
+    current_user: str = Depends(require_permission("csv_watch_folders", "DELETE")),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Synchronous: remove a watched folder by id."""
+    deleted = await session.execute(
+        text("DELETE FROM csv_watch_folders WHERE id = :fid RETURNING id"),
+        {"fid": folder_id},
+    )
+    if not deleted.fetchone():
+        raise HTTPException(status_code=404, detail=f"Folder {folder_id} nie znaleziony")
+    await session.commit()
+    return {"ok": True, "id": folder_id}
+

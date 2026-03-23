@@ -2,7 +2,8 @@
 Testy dynamicznych endpointów CRUD (auto-generowanych na podstawie schematu DB).
 Używamy tabeli 'roles' — zawsze istnieje po inicjalizacji (feed_db.py).
 """
-import pytest
+
+from tests.conftest import TEST_ROLE_NAME
 
 
 class TestGetList:
@@ -71,7 +72,7 @@ class TestGetList:
 class TestCreateAndDelete:
     def test_post_creates_record(self, client, admin_headers):
         """POST /roles tworzy nowy rekord i zwraca task_id."""
-        payload = {"name": "test_role_do_usuniecia", "power": 5}
+        payload = {"name": TEST_ROLE_NAME, "power": 5}
         resp = client.post("/roles", json=payload, headers=admin_headers)
         assert resp.status_code in (200, 201, 202)
         data = resp.json()

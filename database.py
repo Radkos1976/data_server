@@ -1,6 +1,6 @@
-from typing import Dict, Type, Optional
+from typing import Dict, Type, Optional, AsyncGenerator
 from datetime import datetime
-from sqlalchemy import MetaData, inspect
+from sqlalchemy import MetaData, inspect, Column, Enum as SAEnum
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlmodel import SQLModel, Relationship, create_engine as create_sync_engine, Field
 from enum import Enum as PyEnum
@@ -9,6 +9,12 @@ from type_mapping import SQL_TYPE_MAPPING
 
 async_engine = create_async_engine(DB_URL_ASYNC)
 AsyncSessionLocal = async_sessionmaker(async_engine, expire_on_commit=False)
+
+
+async def get_async_session() -> AsyncGenerator:
+    """Zwraca sesję async i zawsze domyka po zakończeniu requestu."""
+    async with AsyncSessionLocal() as session:
+        yield session
 
 # Synchronizuje silnik do inspekcji schematu
 sync_engine = create_sync_engine(DB_URL_SYNC)
@@ -21,12 +27,15 @@ class TaskStatus(PyEnum):
     ERROR = "ERROR"
 
 # Statyczny model dla logów Celery
+# SAEnum z create_type=False — używa istniejącego w DB typu task_status (nie próbuje go tworzyć)
+_task_status_col = SAEnum("STARTED", "SUCCESS", "ERROR", name="task_status", create_type=False)
+
 class Log(SQLModel, table=True):
     __tablename__ = "logs"
     id: Optional[int] = Field(default=None, primary_key=True)
     task_id: str
     task_name: str
-    status: TaskStatus
+    status: str = Field(sa_column=Column(_task_status_col, nullable=False))
     message: Optional[str] = None
     username: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.now)

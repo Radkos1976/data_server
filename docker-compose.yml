@@ -50,6 +50,30 @@ services:
       - data_server_network
 
   # =================================================================
+  # Celery Worker - przetwarza async CRUD (POST/PUT/DELETE)
+  # =================================================================
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: data_server_worker
+    environment:
+      - ENV_FILE=.env.docker
+    env_file:
+      - .env.docker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./data/imports_input:/data/imports_input
+    command: >
+      sh -c "celery -A worker.celery_app worker --loglevel=info --concurrency=2"
+    networks:
+      - data_server_network
+
+  # =================================================================
   # Aplikacja FastAPI
   # =================================================================
   app:

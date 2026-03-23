@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 
-from sqlalchemy import insert
+from sqlalchemy import text
 
 from database import AsyncSessionLocal, MODELS
 
@@ -21,15 +21,26 @@ async def log_access(
     try:
         async with AsyncSessionLocal() as session:
             await session.execute(
-                insert(MODELS["access_logs"]).values(
-                    username=username,
-                    method=method,
-                    path=path,
-                    status_code=status_code,
-                    detail=detail,
-                    ip_address=ip,
-                    user_agent=user_agent,
-                )
+                text(
+                    """
+                    INSERT INTO access_logs (
+                        username, method, path, status_code, user_agent, ip_address, detail
+                    )
+                    VALUES (
+                        :username, :method, :path, :status_code, :user_agent,
+                        CAST(:ip AS INET), :detail
+                    )
+                    """
+                ),
+                {
+                    "username": username,
+                    "method": method,
+                    "path": path,
+                    "status_code": status_code,
+                    "user_agent": user_agent,
+                    "ip": ip,
+                    "detail": detail,
+                },
             )
             await session.commit()
     except Exception as exc:
