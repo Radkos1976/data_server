@@ -5,7 +5,7 @@ Aplikacja może działać w dwóch środowiskach: **lokalnie (VSC + WSL2)** lub 
 ## Struktura folderów
 
 ```
-/home/radkos/data_server/          # Główny folder aplikacji
+<PROJECT_ROOT>/                    # Główny folder aplikacji
 ├── .env.local                      # Konfiguracja dla środowiska lokalnego
 ├── .env.docker                     # Konfiguracja dla Dockera
 ├── docker-compose.yml              # Setup Postgres + Redis + App w Dockerze
@@ -126,14 +126,14 @@ Wybierz opcję [1-4]: 1
 
 === Konfiguracja ścieżek ===
 
-Ścieżka do danych PostgreSQL: [domyślnie: /home/radkos/data_server/data/postgres_data]: 
-Ścieżka do danych Redis: [domyślnie: /home/radkos/data_server/data/redis_data]: 
-Ścieżka do importu CSV: [domyślnie: /home/radkos/data_server/data/imports_input]: 
+Ścieżka do danych PostgreSQL: [domyślnie: <PROJECT_ROOT>/data/postgres_data]: 
+Ścieżka do danych Redis: [domyślnie: <PROJECT_ROOT>/data/redis_data]: 
+Ścieżka do importu CSV: [domyślnie: <PROJECT_ROOT>/data/imports_input]: 
 
 === Weryfikacja ścieżek ===
-✓ PostgreSQL: /home/radkos/data_server/data/postgres_data
-✓ Redis: /home/radkos/data_server/data/redis_data
-✓ CSV import: /home/radkos/data_server/data/imports_input
+✓ PostgreSQL: <PROJECT_ROOT>/data/postgres_data
+✓ Redis: <PROJECT_ROOT>/data/redis_data
+✓ CSV import: <PROJECT_ROOT>/data/imports_input
 
 Czy chcesz uruchomić Docker? (y/n) [y]: y
 
@@ -146,9 +146,9 @@ Przykład (drugie uruchomienie — używa memoratora):
 === Setup Docker - Data Server ===
 
 Obecna konfiguracja:
-PostgreSQL data:  /home/radkos/data_server/data/postgres_data
-Redis data:       /home/radkos/data_server/data/redis_data
-CSV import:       /home/radkos/data_server/data/imports_input
+PostgreSQL data:  <PROJECT_ROOT>/data/postgres_data
+Redis data:       <PROJECT_ROOT>/data/redis_data
+CSV import:       <PROJECT_ROOT>/data/imports_input
 
 Opcje:
   1) Skonfiguruj nowe ścieżki
@@ -159,6 +159,12 @@ Opcje:
 Wybierz opcję [1-4]: 2
 ✓ Załadowana poprzednia konfiguracja
 ```
+
+### Ważne dla pracy zespołowej
+
+- Plik `docker-compose.override.yml` jest generowany lokalnie przez `setup-docker.sh` i zawiera ścieżki specyficzne dla użytkownika/maszyny.
+- Plik `.env.docker.paths` jest lokalnym cache konfiguracji ścieżek z ostatniego uruchomienia skryptu.
+- Te pliki nie powinny być commitowane do repozytorium.
 
 ### Tryb automatyczny (dla zaawansowanych użytkowników)
 
@@ -277,7 +283,7 @@ docker-compose down
 | Database host | `localhost` | `postgres` (Docker DNS) |
 | Database port | `5432` | `5432` (wewnątrz sieci Dockera) |
 | Redis host | `localhost` | `redis` (Docker DNS) |
-| CSV import folder | Lokalna ścieżka WSL (np `/home/radkos/...`) | Volume mount (np `/data/imports_input`) |
+| CSV import folder | Lokalna ścieżka WSL (np `<PROJECT_ROOT>/imports_input`) | Volume mount (np `/data/imports_input`) |
 | Plik .env | `.env.local` → `.env` | `.env.docker` (automatycznie przez docker-compose) |
 | Data persystencja | Gdy PostgreSQL uruchomiony lokalnie | Foldery `./data/postgres_data`, `./data/redis_data` |
 
@@ -290,12 +296,12 @@ docker-compose down
 1. Ustaw w `.env`:
    ```
    CSV_WATCH_ENABLED=true
-   CSV_WATCH_DIRECTORY=/home/radkos/data_server/imports_input
+   CSV_WATCH_DIRECTORY=<PROJECT_ROOT>/imports_input
    ```
 
 2. Utwórz folder:
    ```bash
-   mkdir -p /home/radkos/data_server/imports_input
+   mkdir -p <PROJECT_ROOT>/imports_input
    ```
 
 3. Wrzuć plik CSV do folderu — watcher go automatycznie przetworzy (co 30 sekund).

@@ -21,6 +21,10 @@ __pycache__/
 .env
 .env.local
 .env.docker
+.env.docker.paths
+
+# Docker local overrides (user/machine specific)
+docker-compose.override.yml
 
 # Docker data (persystencja - poza gitignorem)
 data/
