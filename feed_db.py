@@ -316,7 +316,7 @@ def setup_database():
                 EXECUTE sql_text;
 
                 -- 3. quantity not positive integer
-                sql_text := format(  # noqa: E501
+                sql_text := format(
                     'UPDATE %I
                      SET processing_status = ''ERROR'',
                          error_reason = ''quantity musi być liczbą dodatnią, otrzymano: '' || COALESCE(quantity, ''NULL''),
@@ -343,7 +343,7 @@ def setup_database():
                 EXECUTE sql_text;
 
                 -- 5. planned_date invalid (akceptowane: YYYY-MM-DD, DD.MM.YYYY, DD-MM-YYYY, DD/MM/YYYY)
-                sql_text := format(  # noqa: E501
+                sql_text := format(
                     'UPDATE %I
                      SET processing_status = ''ERROR'',
                          error_reason = ''planned_date ma niepoprawny format (dozwolone: YYYY-MM-DD, DD.MM.YYYY, DD-MM-YYYY, DD/MM/YYYY), otrzymano: '' || COALESCE(planned_date, ''NULL''),
@@ -395,7 +395,7 @@ def setup_database():
                 EXECUTE sql_text;
 
                 -- Insert error rows
-                sql_text := format(  # noqa: E501
+                sql_text := format(
                     'INSERT INTO imports_errors
                      (import_file_id, row_number, external_id, product_code, quantity, unit, planned_date, comment, error_reason, error_type)
                      SELECT %s, row_number, external_id, product_code, quantity, unit, planned_date, comment, error_reason, error_type
@@ -406,7 +406,7 @@ def setup_database():
                 GET DIAGNOSTICS error_count = ROW_COUNT;
 
                 -- Insert warnings for VALID rows that will replace records from previous imports
-                sql_text := format(  # noqa: E501
+                sql_text := format(
                     'INSERT INTO imports_errors
                      (import_file_id, row_number, external_id, product_code, quantity, unit, planned_date, comment, error_reason, error_type, warning_type)
                      SELECT %s, t.row_number, t.external_id, t.product_code, t.quantity, t.unit, t.planned_date, t.comment,
@@ -420,7 +420,7 @@ def setup_database():
                 EXECUTE sql_text;
 
                 -- Insert valid rows (upsert — replace if external_id already exists)
-                sql_text := format(  # noqa: E501
+                sql_text := format(
                     'INSERT INTO imports_data (import_file_id, external_id, product_code, quantity, unit, planned_date, comment)
                      SELECT %s, external_id, product_code, quantity::INTEGER, unit,
                             CASE
