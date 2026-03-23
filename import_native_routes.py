@@ -8,7 +8,6 @@ import logging
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Query
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional, List
 
 from database import get_async_session
 from auth import get_current_user, require_permission
@@ -94,6 +93,7 @@ async def get_watcher_status(
 # 1. POST /imports - Upload CSV
 # ============================================================
 
+
 @router.post("")
 async def upload_csv(
     file: UploadFile = File(...),
@@ -102,30 +102,30 @@ async def upload_csv(
 ):
     """
     Upload CSV do importu
-    
+
     Flow:
     1. Oblicz SHA256 pliku
     2. Sprawdź czy już przetworzony
     3. Jeśli TAK - zwróć status
     4. Jeśli NIE - uruchom synchroniczny import (SQL COPY + walidacja)
-    
+
     Returns:
         - Jeśli nowy plik: status COMPLETED + counts
         - Jeśli duplikat: status ALREADY_PROCESSED + poprzednie counts
         - Jeśli błąd: status ERROR + error_message
     """
-    
+
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="Tylko pliki CSV")
-    
+
     try:
         # Odczyt zawartości
         content = await file.read()
-        
+
         # Sprawdzenie duplikatu
         file_checksum = calculate_sha256(content)
         existing = await check_file_already_processed(session, file.filename, file_checksum)
-        
+
         if existing:
             logger.info("CSV upload ALREADY_PROCESSED: file=%s user=%s", file.filename, current_user)
             await log_access(current_user, "POST", "/imports", 200,
@@ -140,10 +140,10 @@ async def upload_csv(
                 "warning_type": existing["warning_type"],
                 "message": f"Plik {file.filename} został już przetworzony"
             }
-        
+
         # Import (synchroniczny - SQL side)
         import_file_id, result = import_csv_native(content, file.filename, current_user)
-        
+
         if import_file_id is None:
             logger.error("CSV upload ERROR: file=%s user=%s error=%s",
                          file.filename, current_user, result.get("error_message"))
@@ -154,8 +154,10 @@ async def upload_csv(
         logger.info("CSV upload COMPLETED: file=%s user=%s ok=%s errors=%s import_id=%s",
                     file.filename, current_user,
                     result.get("ok_rows", 0), result.get("error_rows", 0), import_file_id)
-        await log_access(current_user, "POST", "/imports", 200,
-                         f"Import OK: {file.filename} ok={result.get('ok_rows',0)} błędy={result.get('error_rows',0)}")
+        await log_access(
+            current_user, "POST", "/imports", 200,
+            f"Import OK: {file.filename} ok={result.get('ok_rows', 0)} "
+            f"błędy={result.get('error_rows', 0)}")
         return {
             "status": result["status"],
             "import_file_id": import_file_id,
@@ -189,20 +191,20 @@ async def list_imports(
     """
     Lista wszystkich importów z paginacją
     """
-    
+
     offset = page * limit
-    
+
     # Total count
     result = await session.execute(
         text("SELECT COUNT(*) FROM imports_files")
     )
     total = result.scalar()
     pages = (total + limit - 1) // limit
-    
+
     # Data
     result = await session.execute(
         text("""
-            SELECT 
+            SELECT
                 id, filename, file_checksum, processed_at,
                 total_rows, ok_rows, error_rows, warning_type, processed_by
             FROM imports_files
@@ -211,7 +213,7 @@ async def list_imports(
         """),
         {"limit": limit, "offset": offset}
     )
-    
+
     rows = result.fetchall()
     data = [
         {
@@ -227,7 +229,7 @@ async def list_imports(
         }
         for row in rows
     ]
-    
+
     return {
         "page": page,
         "limit": limit,
@@ -250,10 +252,10 @@ async def get_import_details(
     """
     Szczegóły pojedynczego importu
     """
-    
+
     result = await session.execute(
         text("""
-            SELECT 
+            SELECT
                 id, filename, file_checksum, processed_at, completed_at,
                 total_rows, ok_rows, error_rows, warning_type, processed_by
             FROM imports_files
@@ -261,11 +263,11 @@ async def get_import_details(
         """),
         {"import_id": import_id}
     )
-    
+
     row = result.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Import nie znaleziony")
-    
+
     return {
         "id": row[0],
         "filename": row[1],
@@ -296,7 +298,7 @@ async def get_import_errors(
     """
     Historia błędów dla danego importu
     """
-    
+
     # Sprawdzenie czy import istnieje
     result = await session.execute(
         text("SELECT id FROM imports_files WHERE id = :import_id"),
@@ -304,9 +306,9 @@ async def get_import_errors(
     )
     if not result.fetchone():
         raise HTTPException(status_code=404, detail="Import nie znaleziony")
-    
+
     offset = page * limit
-    
+
     # Total count
     result = await session.execute(
         text("""
@@ -316,11 +318,11 @@ async def get_import_errors(
     )
     total = result.scalar()
     pages = (total + limit - 1) // limit
-    
+
     # Data
     result = await session.execute(
         text("""
-            SELECT 
+            SELECT
                 id, row_number, external_id, product_code, quantity, unit, planned_date,
                 comment, error_reason, error_type, warning_type, created_at
             FROM imports_errors
@@ -330,7 +332,7 @@ async def get_import_errors(
         """),
         {"import_id": import_id, "limit": limit, "offset": offset}
     )
-    
+
     rows = result.fetchall()
     data = [
         {
@@ -349,7 +351,7 @@ async def get_import_errors(
         }
         for row in rows
     ]
-    
+
     return {
         "import_id": import_id,
         "page": page,
@@ -375,7 +377,7 @@ async def get_import_data(
     """
     Rekordy które zostały pomyślnie zaimportowane
     """
-    
+
     # Sprawdzenie czy import istnieje
     result = await session.execute(
         text("SELECT id FROM imports_files WHERE id = :import_id"),
@@ -383,9 +385,9 @@ async def get_import_data(
     )
     if not result.fetchone():
         raise HTTPException(status_code=404, detail="Import nie znaleziony")
-    
+
     offset = page * limit
-    
+
     # Total count
     result = await session.execute(
         text("""
@@ -395,11 +397,11 @@ async def get_import_data(
     )
     total = result.scalar()
     pages = (total + limit - 1) // limit
-    
+
     # Data
     result = await session.execute(
         text("""
-            SELECT 
+            SELECT
                 id, external_id, product_code, quantity, unit, planned_date, comment, imported_at
             FROM imports_data
             WHERE import_file_id = :import_id
@@ -408,7 +410,7 @@ async def get_import_data(
         """),
         {"import_id": import_id, "limit": limit, "offset": offset}
     )
-    
+
     rows = result.fetchall()
     data = [
         {
@@ -423,7 +425,7 @@ async def get_import_data(
         }
         for row in rows
     ]
-    
+
     return {
         "import_id": import_id,
         "page": page,
@@ -565,4 +567,3 @@ async def delete_watcher_folder(
         raise HTTPException(status_code=404, detail=f"Folder {folder_id} nie znaleziony")
     await session.commit()
     return {"ok": True, "id": folder_id}
-

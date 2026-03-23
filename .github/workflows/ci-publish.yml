@@ -29,6 +29,10 @@ jobs:
           pip install pytest pytest-asyncio httpx
           pip install -r requirements.txt
 
+      - name: Run flake8 lint check
+        run: |
+          python -m flake8 . --exclude=.venv,__pycache__,migrations --max-line-length=120 --count
+
       - name: Create CI env file
         run: |
           cat > .env.docker << 'EOF'

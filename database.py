@@ -21,14 +21,18 @@ sync_engine = create_sync_engine(DB_URL_SYNC)
 metadata = MetaData()
 
 # Enum dla statusu logów
+
+
 class TaskStatus(PyEnum):
     STARTED = "STARTED"
     SUCCESS = "SUCCESS"
     ERROR = "ERROR"
 
+
 # Statyczny model dla logów Celery
 # SAEnum z create_type=False — używa istniejącego w DB typu task_status (nie próbuje go tworzyć)
 _task_status_col = SAEnum("STARTED", "SUCCESS", "ERROR", name="task_status", create_type=False)
+
 
 class Log(SQLModel, table=True):
     __tablename__ = "logs"
@@ -39,6 +43,7 @@ class Log(SQLModel, table=True):
     message: Optional[str] = None
     username: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.now)
+
 
 def get_dynamic_models() -> Dict[str, Type[SQLModel]]:
     metadata.reflect(bind=sync_engine)
@@ -90,6 +95,7 @@ def get_dynamic_models() -> Dict[str, Type[SQLModel]]:
                 # Relacja: Rodzic -> Lista Dzieci
                 setattr(models[ref_table], f"{table_name}_list", Relationship())
     return models
+
 
 # Globalny słownik modeli dostępny dla API i Workera
 MODELS = get_dynamic_models()

@@ -1,3 +1,4 @@
+from auth import get_current_user
 from fastapi import FastAPI, Depends, Path, HTTPException, Request, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -26,6 +27,7 @@ from csv_folder_watcher import run_csv_folder_watcher
 # Konfiguracja logowania
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -60,12 +62,14 @@ app.include_router(import_native_router)
 def _panel_path():
     return FilePath(__file__).resolve().parent / "static" / "imports_panel.html"
 
+
 @app.get("/", include_in_schema=False)
 async def root_panel():
     p = _panel_path()
     if not p.exists():
         raise HTTPException(status_code=404, detail="Panel file not found")
     return FileResponse(p)
+
 
 @app.get("/panel/imports", include_in_schema=False)
 async def imports_panel():
@@ -75,13 +79,16 @@ async def imports_panel():
     return FileResponse(p)
 
 # 1. Automatyczne Endpointy (Dynamic CRUD)
-# Tworzymy endpointy dla każdej tabeli w bazie danych, korzystając z dynamicznie wygenerowanych modeli SQLModel i relacji. 
-# Każdy endpoint jest asynchroniczny, aby nie blokować serwera podczas operacji na bazie danych.
+# Tworzymy endpointy dla każdej tabeli w bazie danych,
+# korzystając z dynamicznie wygenerowanych modeli SQLModel i relacji.
+# Każdy endpoint jest asynchroniczny,
+# aby nie blokować serwera podczas operacji na bazie danych.
 for table_name, ModelClass in MODELS.items():
     # `/access_logs` ma dedykowany endpoint admina z własnym sortowaniem.
     # Pomijamy dynamiczny CRUD, aby nie nadpisywał tej trasy.
     if table_name == "access_logs":
         continue
+
     def make_routes(name=table_name, model=ModelClass):
         @app.get(f"/{name}", tags=[name], dependencies=[Depends(RateLimiter(times=100, seconds=60))])
         async def list_items(
@@ -93,14 +100,14 @@ for table_name, ModelClass in MODELS.items():
         ):
             """
             GET /{table_name}
-            
+
             Parametry możliwe do filtrowania:
             - Dokładne dopasowanie: ?field=value
             - Wiele wartości (OR): ?field=value1,value2 lub ?field=value1&field=value2
             - Pattern matching: ?field__like=pattern (obsługuje * jako wildcard)
             - Null filtering: ?field=null
             - Paginacja: ?page=0&limit=100 LUB ?offset=50&limit=100
-            
+
             Przykłady:
             - GET /{name}?username=john&age=30 (username=john AND age=30)
             - GET /{name}?status=active,inactive (status IN [active, inactive])
@@ -142,31 +149,33 @@ for table_name, ModelClass in MODELS.items():
         async def create_async(data: dict, user: str = Depends(require_permission(name, "POST"))):
             """
             POST /{table_name}
-            
+
             Parametry request body (JSON):
             - data: dict - zawiera wszystkie pola rekordu do utworzenia
-            
+
             Zwraca: task_id i powiadomienie SSE: SUCCESS:{name}:{id}:{task_id}
             """
             task_id = str(uuid.uuid4())
             process_transaction.delay(name, data, task_id, user)
             return {"task_id": task_id, "info": "Przetwarzanie w tle"}
-        
-        @app.delete(f"/{name}/{{item_id}}", tags=[name], status_code=202, dependencies=[Depends(RateLimiter(times=5, seconds=60))])
+
+        @app.delete(f"/{name}/{{item_id}}", tags=[name], status_code=202,
+                    dependencies=[Depends(RateLimiter(times=5, seconds=60))])
         async def delete_async(
             item_id: str = Path(..., description="Klucz główny rekordu do usunięcia"),
             user: str = Depends(require_permission(name, "DELETE"))
         ):
             """
             DELETE /{table_name}/{item_id}
-            
+
             Zwraca: task_id i powiadomienie SSE: DELETED:{name}:{item_id}:{task_id}
             """
             task_id = str(uuid.uuid4())
             process_delete_task.delay(name, item_id, task_id, user)
             return {"task_id": task_id, "message": "Zlecono usunięcie rekordu"}
-        
-        @app.put(f"/{name}/{{item_id}}", tags=[name], status_code=202, dependencies=[Depends(RateLimiter(times=10, seconds=60))])
+
+        @app.put(f"/{name}/{{item_id}}", tags=[name], status_code=202,
+                 dependencies=[Depends(RateLimiter(times=10, seconds=60))])
         async def update_async(
             item_id: str = Path(..., description="Klucz główny rekordu do aktualizacji"),
             data: dict = None,
@@ -174,16 +183,18 @@ for table_name, ModelClass in MODELS.items():
         ):
             """
             PUT /{table_name}/{item_id}
-            
+
             Zwraca: task_id i powiadomienie SSE: UPDATED:{name}:{item_id}:{task_id}
             """
             task_id = str(uuid.uuid4())
             process_update_task.delay(name, item_id, data, task_id, user)
             return {"task_id": task_id, "message": "Zlecono aktualizację rekordu"}
-            
+
     make_routes()
 
 # 2. Strumień SSE (Powiadomienia bez "mielenia" procesora)
+
+
 @app.get("/stream")
 async def message_stream():
     async def event_generator():
@@ -193,15 +204,16 @@ async def message_stream():
             async for message in pubsub.listen():
                 if message["type"] == "message":
                     yield {"event": "db_change", "data": message["data"].decode()}
-    
+
     return EventSourceResponse(event_generator())
+
 
 @app.post("/token", tags=["Auth"], dependencies=[Depends(RateLimiter(times=5, seconds=60))])
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     logger.info(f"LOGIN ATTEMPT: User {form_data.username}")
     # 1. Pobieramy klasę użytkownika z naszej fabryki
     UsersClass = MODELS["users"]
-    
+
     async with AsyncSessionLocal() as session:
         # 2. Szukamy użytkownika w Postgresie
         result = await session.execute(
@@ -217,12 +229,12 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
     # 4. TO JEST TO MIEJSCE: Tworzymy token i wkładamy username do pola 'sub'
     access_token = create_access_token(data={"sub": user.username})
-    
+
     logger.info(f"LOGIN SUCCESS: User {form_data.username}")
     await log_access(form_data.username, "AUTHN", "/token", None, "Login successful")
-    # 5. Zwracamy token do frontendu 
+    # 5. Zwracamy token do frontendu
     refresh_token = create_refresh_token(data={"sub": user.username})
-    
+
     logger.info(f"LOGIN SUCCESS: User {form_data.username}")
     await log_access(form_data.username, "AUTHN", "/token", None, "Login successful")
     # 5. Zwracamy oba tokeny do frontendu
@@ -232,29 +244,31 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         "token_type": "bearer"
     }
 
+
 @app.post("/refresh", tags=["Auth"], dependencies=[Depends(RateLimiter(times=10, seconds=60))])
 async def refresh_access_token(refresh_token: str):
     """
     Endpoint do odswiezenia access_token.
-    
+
     Request body (JSON):
     - refresh_token: string - token refresh z poprzedniego logowania
-    
+
     Zwraca nowy access_token bez koniecznosci ponownego logowania.
     """
     # Walidujemy refresh token
     username = validate_refresh_token(refresh_token)
-    
+
     # Tworzymy nowy access token
     new_access_token = create_access_token(data={"sub": username})
-    
+
     logger.info(f"TOKEN REFRESHED: User {username}")
     await log_access(username, "AUTHN", "/refresh", None, "Token refreshed")
-    
+
     return {
         "access_token": new_access_token,
         "token_type": "bearer"
     }
+
 
 @app.get("/access_logs", tags=["Admin"])
 async def get_access_logs(
@@ -280,7 +294,7 @@ async def get_access_logs(
             count_base = count_base.where(cond)
         total = (await session.execute(count_base)).scalar_one()
         result = await session.execute(
-                        base.order_by(AccessLog.timestamp.desc())
+            base.order_by(AccessLog.timestamp.desc())
             .offset(offset).limit(limit)
         )
         logs = result.scalars().all()
@@ -292,13 +306,12 @@ async def get_access_logs(
             "data": [serialize_row(log) for log in logs]
         }
 
-from auth import get_current_user
 
 @app.get("/me", tags=["Auth"])
 async def get_me(current_user: str = Depends(get_current_user)):
     """Zwraca informacje o zalogowanym użytkowniku (username, rola, power)."""
     UsersClass = MODELS["users"]
-    RoleClass  = MODELS["roles"]
+    RoleClass = MODELS["roles"]
     async with AsyncSessionLocal() as session:
         result = await session.execute(
             select(UsersClass).where(UsersClass.username == current_user)

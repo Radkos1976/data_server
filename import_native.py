@@ -20,11 +20,12 @@ logger = logging.getLogger(__name__)
 # Synchronous DB wrapper (dla procedur SQL)
 # ============================================================
 
+
 def get_sync_connection():
     """Zwraca synchroniczną konekcję dla procedur SQL"""
     import psycopg2
     from urllib.parse import urlparse
-    
+
     parsed = urlparse(DB_URL_SYNC)
     return psycopg2.connect(
         dbname=parsed.path.lstrip('/'),
@@ -60,14 +61,14 @@ async def check_file_already_processed(
 ) -> Optional[dict]:
     """
     Sprawdza czy plik został już przetworzony
-    
+
     Returns:
         None если file_checksum nie istnieje
         dict z import_files record jeśli istnieje
     """
     result = await session.execute(
         text("""
-            SELECT id, filename, file_checksum, processed_at, 
+            SELECT id, filename, file_checksum, processed_at,
                    total_rows, ok_rows, error_rows, warning_type, processed_by
             FROM imports_files
             WHERE filename = :filename AND file_checksum = :checksum
@@ -75,10 +76,10 @@ async def check_file_already_processed(
         {"filename": filename, "checksum": file_checksum}
     )
     row = result.fetchone()
-    
+
     if not row:
         return None
-    
+
     return {
         "import_file_id": row[0],
         "filename": row[1],
@@ -104,16 +105,16 @@ def import_csv_native(
 ) -> Tuple[int, dict]:
     """
     Główny flow importu - wszystko na SQL side
-    
+
     Args:
         csv_content: zawartość pliku CSV
         filename: nazwa pliku
         username: który użytkownik uploaduje
-    
+
     Returns:
         (import_file_id, result_dict)
     """
-    
+
     file_checksum = calculate_sha256(csv_content)
     task_id = str(uuid.uuid4())
     conn = get_sync_connection()
@@ -123,14 +124,14 @@ def import_csv_native(
         # 1. Sprawdzenie czy plik już istnieje
         cur.execute(
             """
-            SELECT id, total_rows, ok_rows, error_rows, warning_type 
-            FROM imports_files 
+            SELECT id, total_rows, ok_rows, error_rows, warning_type
+            FROM imports_files
             WHERE filename = %s AND file_checksum = %s
             """,
             (filename, file_checksum)
         )
         existing = cur.fetchone()
-        
+
         if existing:
             # Plik Already processed
             return (existing[0], {
@@ -143,7 +144,7 @@ def import_csv_native(
                 "error_rows": existing[3] or 0,
                 "warning_type": existing[4] or "NONE"
             })
-        
+
         # 2. Tworzenie rekordu w imports_files
         cur.execute(
             """
@@ -176,7 +177,7 @@ def import_csv_native(
                 error_type VARCHAR(20)
             ) ON COMMIT DROP
         """)
-        
+
         # 4. COPY CSV do temp tabeli
         _copy_csv_to_temp(
             cur,
@@ -185,25 +186,25 @@ def import_csv_native(
             import_file_id,
             temp_table_name
         )
-        
+
         # 5. Walidacja i podział po stronie Postgres (PL/pgSQL)
         cur.execute(
             "SELECT ok_count, error_count, warning_type FROM process_import_temp(%s, %s)",
             (temp_table_name, import_file_id)
         )
         ok_count, error_count, warning_type = cur.fetchone()
-        
+
         # 6. Update imports_files z wynikami
         cur.execute(
             """
-            UPDATE imports_files 
-            SET total_rows = %s, ok_rows = %s, error_rows = %s, 
+            UPDATE imports_files
+            SET total_rows = %s, ok_rows = %s, error_rows = %s,
                 warning_type = %s, processed_at = NOW(), completed_at = NOW()
             WHERE id = %s
             """,
             (ok_count + error_count, ok_count, error_count, warning_type, import_file_id)
         )
-        
+
         _log_to_db(cur, task_id, "csv_import", "SUCCESS",
                    f"Import ukończony: {filename} ok={ok_count} błędy={error_count} warning={warning_type}",
                    username)
@@ -222,7 +223,7 @@ def import_csv_native(
             "error_rows": error_count,
             "warning_type": warning_type
         })
-    
+
     except Exception as e:
         conn.rollback()
         logger.error("CSV import ERROR: file=%s user=%s task_id=%s error=%s",
@@ -240,7 +241,7 @@ def import_csv_native(
             "status": "ERROR",
             "error_message": str(e)
         })
-    
+
     finally:
         cur.close()
         conn.close()
@@ -288,6 +289,7 @@ def _detect_csv_encoding_and_delimiter(csv_content: bytes) -> Tuple[str, str]:
 
     return decoded_text, delimiter
 
+
 def _copy_csv_to_temp(
     cursor,
     csv_content: bytes,
@@ -300,10 +302,10 @@ def _copy_csv_to_temp(
     """
     csv_text, delimiter = _detect_csv_encoding_and_delimiter(csv_content)
     lines = csv_text.strip().splitlines()
-    
+
     if len(lines) < 2:
         raise ValueError("CSV musi mieć nagłówek i przynajmniej 1 wiersz")
-    
+
     # Sprawdzenie nagłówków
     headers = [h.strip() for h in next(csv.reader([lines[0]], delimiter=delimiter))]
     required_headers = ['external_id', 'product_code', 'quantity', 'unit', 'planned_date', 'comment']
@@ -314,13 +316,13 @@ def _copy_csv_to_temp(
             f"Oczekiwano dokładnie: {required_headers}. "
             f"Otrzymano: {headers}"
         )
-    
+
     # Przygotowanie danych do COPY
     csv_buffer = io.StringIO()
     csv_buffer.write("\n".join(lines) + "\n")
-    
+
     csv_buffer.seek(0)
-    
+
     # COPY do tabeli tymczasowej
     cursor.copy_expert(
         f"""
@@ -330,7 +332,7 @@ def _copy_csv_to_temp(
         """,
         csv_buffer
     )
-    
+
     # Nadanie numerów wierszy po COPY
     cursor.execute(f"""
         WITH numbered AS (
@@ -342,7 +344,5 @@ def _copy_csv_to_temp(
         FROM numbered n
         WHERE t.ctid = n.ctid
     """)
-    
+
     csv_buffer.close()
-
-

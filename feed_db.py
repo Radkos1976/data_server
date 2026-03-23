@@ -13,6 +13,7 @@ NEW_USER = os.getenv("DB_USER", "moj_uzytkownik")
 NEW_PASS = os.getenv("DB_PASSWORD", "silne_haslo123")
 NEW_DB = os.getenv("DB_NAME", "moja_baza")
 
+
 def wait_for_db(params, retries=20, delay=2):
     """Pętla oczekująca na gotowość bazy danych."""
     print("Oczekiwanie na gotowość PostgreSQL...")
@@ -23,10 +24,11 @@ def wait_for_db(params, retries=20, delay=2):
             print("PostgreSQL jest gotowy!")
             return True
         except psycopg2.OperationalError:
-            print(f"Baza jeszcze nie odpowiada... (próba {i+1}/{retries})")
+            print(f"Baza jeszcze nie odpowiada... (próba {i + 1}/{retries})")
             time.sleep(delay)
     print("Nie udało się połączyć z bazą danych.")
     return False
+
 
 def setup_database():
     # Najpierw czekamy na start serwera
@@ -46,7 +48,7 @@ def setup_database():
                 sql.Identifier(NEW_USER)), [NEW_PASS]
             )
             print(f"Użytkownik '{NEW_USER}' utworzony.")
-        
+
         # 3. Tworzenie bazy danych (jeśli nie istnieje)
         cur.execute("SELECT 1 FROM pg_database WHERE datname=%s", (NEW_DB,))
         if not cur.fetchone():
@@ -59,10 +61,10 @@ def setup_database():
         conn.close()
 
         # 4. Łączenie z nową bazą i tworzenie tabeli
-        conn = psycopg2.connect(dbname=NEW_DB, user=NEW_USER, password=NEW_PASS, 
+        conn = psycopg2.connect(dbname=NEW_DB, user=NEW_USER, password=NEW_PASS,
                                 host=ADMIN_DB_PARAMS["host"], port=ADMIN_DB_PARAMS["port"])
         cur = conn.cursor()
-        
+
         cur.execute("""
             CREATE TABLE IF NOT EXISTS roles (
                 id SERIAL PRIMARY KEY,
@@ -314,7 +316,7 @@ def setup_database():
                 EXECUTE sql_text;
 
                 -- 3. quantity not positive integer
-                sql_text := format(
+                sql_text := format(  # noqa: E501
                     'UPDATE %I
                      SET processing_status = ''ERROR'',
                          error_reason = ''quantity musi być liczbą dodatnią, otrzymano: '' || COALESCE(quantity, ''NULL''),
@@ -341,7 +343,7 @@ def setup_database():
                 EXECUTE sql_text;
 
                 -- 5. planned_date invalid (akceptowane: YYYY-MM-DD, DD.MM.YYYY, DD-MM-YYYY, DD/MM/YYYY)
-                sql_text := format(
+                sql_text := format(  # noqa: E501
                     'UPDATE %I
                      SET processing_status = ''ERROR'',
                          error_reason = ''planned_date ma niepoprawny format (dozwolone: YYYY-MM-DD, DD.MM.YYYY, DD-MM-YYYY, DD/MM/YYYY), otrzymano: '' || COALESCE(planned_date, ''NULL''),
@@ -393,7 +395,7 @@ def setup_database():
                 EXECUTE sql_text;
 
                 -- Insert error rows
-                sql_text := format(
+                sql_text := format(  # noqa: E501
                     'INSERT INTO imports_errors
                      (import_file_id, row_number, external_id, product_code, quantity, unit, planned_date, comment, error_reason, error_type)
                      SELECT %s, row_number, external_id, product_code, quantity, unit, planned_date, comment, error_reason, error_type
@@ -404,7 +406,7 @@ def setup_database():
                 GET DIAGNOSTICS error_count = ROW_COUNT;
 
                 -- Insert warnings for VALID rows that will replace records from previous imports
-                sql_text := format(
+                sql_text := format(  # noqa: E501
                     'INSERT INTO imports_errors
                      (import_file_id, row_number, external_id, product_code, quantity, unit, planned_date, comment, error_reason, error_type, warning_type)
                      SELECT %s, t.row_number, t.external_id, t.product_code, t.quantity, t.unit, t.planned_date, t.comment,
@@ -418,7 +420,7 @@ def setup_database():
                 EXECUTE sql_text;
 
                 -- Insert valid rows (upsert — replace if external_id already exists)
-                sql_text := format(
+                sql_text := format(  # noqa: E501
                     'INSERT INTO imports_data (import_file_id, external_id, product_code, quantity, unit, planned_date, comment)
                      SELECT %s, external_id, product_code, quantity::INTEGER, unit,
                             CASE
@@ -498,7 +500,7 @@ def setup_database():
             INSERT INTO users (username, hashed_password, role_id, is_active) VALUES (%s, %s, %s, %s)
             ON CONFLICT (username) DO NOTHING;
         """, ('admin', hashed_admin_pass, 1, True))
-        
+
         conn.commit()
         print("Struktura tabel została sprawdzona.")
         return True
@@ -510,6 +512,7 @@ def setup_database():
         if 'conn' in locals() and conn:
             cur.close()
             conn.close()
+
 
 if __name__ == "__main__":
     if not setup_database():

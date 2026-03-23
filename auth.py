@@ -1,3 +1,4 @@
+from database import MODELS, AsyncSessionLocal, sync_engine
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import logging
@@ -14,7 +15,7 @@ from config import REFRESH_TOKEN_EXPIRE_DAYS
 
 logger = logging.getLogger(__name__)
 
-#hierarchia ról (im wyższa, tym większe uprawnienia)
+# hierarchia ról (im wyższa, tym większe uprawnienia)
 # ROLE_HIERARCHY = {
 #     "admin": 100,
 #     "manager": 50,
@@ -30,13 +31,16 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # --- NARZĘDZIA DO HASEŁ ---
 
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
+
 
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 # --- LOGIKA JWT ---
+
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
@@ -44,11 +48,12 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
         expire = datetime.now(timezone.utc) + expires_delta
     else:
         expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+
     to_encode.update({"exp": expire})
     # Tutaj używamy SECRET_KEY do stworzenia podpisu cyfrowego
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
 
 def create_refresh_token(data: dict) -> str:
     """Tworzy refresh token z dluzszym czasem wygasniecia (domyslnie 7 dni)."""
@@ -73,16 +78,17 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         if username is None:
-            logger.warning(f"FAILED AUTH: Invalid token payload")
+            logger.warning("FAILED AUTH: Invalid token payload")
             await log_access("unknown", "AUTHN", "/token", None, "Invalid token payload")
             raise credentials_exception
     except JWTError:
-        logger.warning(f"FAILED AUTH: JWT decode error")
+        logger.warning("FAILED AUTH: JWT decode error")
         await log_access("unknown", "AUTHN", "/token", None, "JWT decode error")
         raise credentials_exception
     logger.info(f"SUCCESS AUTH: User {username} authenticated")
     await log_access(username, "AUTHN", "/token", None, "Authenticated")
     return username
+
 
 def validate_refresh_token(token: str) -> str:
     """Waliduje refresh token i zwraca username. Rzuca HTTPException jesli token niepoprawny."""
@@ -95,45 +101,50 @@ def validate_refresh_token(token: str) -> str:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         # Sprawdzamy czy to refresh token
         if payload.get("type") != "refresh":
-            logger.warning(f"FAILED REFRESH: Token is not refresh token")
+            logger.warning("FAILED REFRESH: Token is not refresh token")
             raise credentials_exception
         username: str = payload.get("sub")
         if username is None:
-            logger.warning(f"FAILED REFRESH: Invalid token payload")
+            logger.warning("FAILED REFRESH: Invalid token payload")
             raise credentials_exception
         return username
     except JWTError:
-        logger.warning(f"FAILED REFRESH: JWT decode error")
+        logger.warning("FAILED REFRESH: JWT decode error")
         raise credentials_exception
 
+
 # Zaimportuj MODELS i AsyncSessionLocal tutaj lub wewnątrz funkcji, by uniknąć circular import
-from database import MODELS, AsyncSessionLocal, sync_engine
-from sqlalchemy import select
 
 # Ładowanie hierarchii ról z bazy danych
+
 def get_role_hierarchy():
     RoleClass = MODELS.get("roles")
     if not RoleClass:
         return {}
-    
+
     with sync_engine.connect() as conn:
         result = conn.execute(select(RoleClass.name, RoleClass.power))
         return {row[0]: row[1] for row in result}
 
-#hierarchia ról (im wyższa, tym większe uprawnienia)
+
+# hierarchia ról (im wyższa, tym większe uprawnienia)
 ROLE_HIERARCHY = get_role_hierarchy()
 
 # Ładowanie słownika permissions z bazy danych
+
+
 def load_permissions_dict():
     PermissionClass = MODELS.get("permissions")
     if not PermissionClass:
         return {}
-    
+
     with sync_engine.connect() as conn:
         result = conn.execute(select(PermissionClass.table_name, PermissionClass.action, PermissionClass.required_role))
         return {(row[0], row[1]): row[2] for row in result}
 
+
 PERMISSIONS_DICT = load_permissions_dict()
+
 
 async def user_has_role(username: str, required_role: str) -> bool:
     UserClass = MODELS.get("users")
@@ -145,13 +156,13 @@ async def user_has_role(username: str, required_role: str) -> bool:
         statement = select(UserClass).where(UserClass.username == username)
         result = await session.execute(statement)
         user = result.scalar_one_or_none()
-        
+
         if not user:
             return False
-        
+
         if not user.is_active:
             return False
-        
+
         # Jeśli użytkownik nie ma roli, traktuj jako guest
         if user.role_id is None:
             user_power = 0
@@ -165,12 +176,13 @@ async def user_has_role(username: str, required_role: str) -> bool:
                 user_power = 0
             else:
                 _, user_power = role_row
-        
+
         # Pobieramy wagę wymaganej roli dla endpointu
         required_power = ROLE_HIERARCHY.get(required_role, 0)
-        
+
         # LOGIKA HIERARCHII: Czy użytkownik ma moc większą lub równą wymaganej?
         return user_power >= required_power
+
 
 def get_required_role_for_action(table_name: str, action: str) -> str:
     required_role = PERMISSIONS_DICT.get((table_name, action))

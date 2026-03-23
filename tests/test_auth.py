@@ -1,8 +1,6 @@
 """
 Testy autoryzacji: login, token, refresh, dostęp bez tokenu.
 """
-import pytest
-import httpx
 from tests.conftest import BASE_URL, ADMIN_USER, ADMIN_PASS, _post_token
 
 

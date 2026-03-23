@@ -3,7 +3,7 @@ from typing import Optional
 
 from sqlalchemy import text
 
-from database import AsyncSessionLocal, MODELS
+from database import AsyncSessionLocal
 
 
 logger = logging.getLogger(__name__)

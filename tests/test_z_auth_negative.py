@@ -7,8 +7,6 @@ Aby uruchomić tylko te testy:
 
 UWAGA: Po wyczerpaniu limitu poczekaj 60 sekund.
 """
-import time
-import pytest
 
 
 class TestLoginNegative:

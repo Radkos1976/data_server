@@ -16,12 +16,14 @@ logger = logging.getLogger(__name__)
 _worker_engine = create_async_engine(DB_URL_ASYNC, poolclass=NullPool)
 _WorkerSession = async_sessionmaker(_worker_engine, expire_on_commit=False)
 
+
 async def log_task(task_id: str, task_name: str, status: TaskStatus, message: str = None, username: str = None):
     """Funkcja do logowania zadań Celery do bazy danych."""
     async with _WorkerSession() as session:
         log_entry = Log(task_id=task_id, task_name=task_name, status=status.value, message=message, username=username)
         session.add(log_entry)
         await session.commit()
+
 
 def _publish(event: str, table_name: str, item_id, task_id: str, extra: str = None):
     msg = f"{event}:{table_name}:{item_id}:{task_id}"
@@ -47,6 +49,7 @@ def _coerce_pk_value(ModelClass, raw_item_id):
     except Exception:
         return raw_item_id
 
+
 async def _execute_db_task(
     table_name, item_id, task_id, task_name, username,
     start_msg, success_event, success_msg, ok_result, body
@@ -70,6 +73,7 @@ async def _execute_db_task(
         await log_task(task_id, task_name, TaskStatus.ERROR, err_msg, username)
         return f"Error: {err_msg}"
 
+
 async def db_transaction_logic(table_name: str, data: dict, task_id: str, username: str = None):
     async def body(session, ModelClass):
         new_item = ModelClass(**data)
@@ -89,6 +93,7 @@ async def db_transaction_logic(table_name: str, data: dict, task_id: str, userna
         body,
     )
 
+
 async def db_delete_logic(table_name: str, item_id: str, task_id: str, username: str = None):
     async def body(session, ModelClass):
         pk_value = _coerce_pk_value(ModelClass, item_id)
@@ -105,6 +110,7 @@ async def db_delete_logic(table_name: str, item_id: str, task_id: str, username:
         f"Deleted {item_id}",
         body,
     )
+
 
 async def db_update_logic(table_name: str, item_id: str, data: dict, task_id: str, username: str = None):
     async def body(session, ModelClass):
@@ -124,15 +130,17 @@ async def db_update_logic(table_name: str, item_id: str, data: dict, task_id: st
         body,
     )
 
+
 @celery_app.task(name="process_transaction")
 def process_transaction(table_name: str, data: dict, task_id: str, username: str = None):
     return asyncio.run(db_transaction_logic(table_name, data, task_id, username))
+
 
 @celery_app.task(name="process_delete_task")
 def process_delete_task(table_name: str, item_id: str, task_id: str, username: str = None):
     return asyncio.run(db_delete_logic(table_name, item_id, task_id, username))
 
+
 @celery_app.task(name="process_update_task")
 def process_update_task(table_name: str, item_id: str, data: dict, task_id: str, username: str = None):
     return asyncio.run(db_update_logic(table_name, item_id, data, task_id, username))
-
