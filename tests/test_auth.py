@@ -3,13 +3,13 @@ Testy autoryzacji: login, token, refresh, dostęp bez tokenu.
 """
 import pytest
 import httpx
-from tests.conftest import BASE_URL
+from tests.conftest import BASE_URL, ADMIN_USER, ADMIN_PASS, _post_token
 
 
 class TestLogin:
     def test_login_success(self, client):
         """Poprawny login zwraca access_token i refresh_token."""
-        resp = client.post("/token", data={"username": "admin", "password": "admin"})
+        resp = _post_token(BASE_URL, ADMIN_USER, ADMIN_PASS)
         assert resp.status_code == 200
         data = resp.json()
         assert "access_token" in data

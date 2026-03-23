@@ -22,7 +22,7 @@
 
       <div class="sidebar-nav">
         <button class="nav-item active" data-view="viewImports" data-min-role="0">
-          <span class="nav-icon">☰</span>
+          <span class="nav-icon">📊</span>
           <span class="nav-label">Lista importów</span>
         </button>
         <button class="nav-item" data-view="viewUpload" data-min-role="10">
@@ -1397,9 +1397,62 @@
       }
     }
 
+    // ─── SSE LISTENER ─────────────────────────────────────
+    let eventSource = null;
+
+    function setupSSEListener() {
+      // Zamknij poprzednie połączenie, jeśli istnieje
+      if (eventSource) {
+        eventSource.close();
+      }
+
+      // Nawiąż nowe połączenie
+      eventSource = new EventSource("/stream");
+
+      eventSource.addEventListener("db_change", (event) => {
+        const message = event.data;
+        console.log("[SSE] Otrzymana zmiana:", message);
+
+        // Parsing: EVENT:TABLE:ITEM_ID:TASK_ID[:EXTRA]
+        const parts = message.split(":", 4);
+        if (parts.length < 4) return;
+
+        const [eventType, tableName, itemId, taskId] = parts;
+
+        // Odśwież odpowiednie widoki w zależności od zmienionej tabeli
+        if (tableName === "import_units") {
+          // Jednostki zmieniły się — odświeża listę jednostek
+          if (state.token) loadUnits();
+        } else if (tableName === "imports") {
+          // Import zmieniła się — odśwież listę importów
+          if (state.token) loadImports();
+        } else if (tableName === "imports_data") {
+          // Dane importu zmieniły się — odśwież wszystkie dane i szczegóły
+          if (state.token) {
+            if (state.selectedImportId) loadDetails(state.selectedImportId);
+            loadAllData();
+          }
+        } else if (tableName === "csv_watcher_folders") {
+          // Watcher folders zmieniły się
+          if (state.token) loadWatcher();
+        }
+      });
+
+      eventSource.addEventListener("error", (event) => {
+        if (eventSource && eventSource.readyState === EventSource.CLOSED) {
+          console.warn("[SSE] Połączenie zamknięte");
+        } else {
+          console.error("[SSE] Błąd połączenia:", event);
+        }
+      });
+
+      console.log("[SSE] Nasłuchiwanie zmian ze strumienia /stream");
+    }
+
     // ─── BOOT ─────────────────────────────────────────────
     async function boot() {
       bindEvents();
+      setupSSEListener();
       if (state.token) {
         setAuth(state.token, state.username);
         try {

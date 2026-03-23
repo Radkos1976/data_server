@@ -78,6 +78,10 @@ async def imports_panel():
 # Tworzymy endpointy dla każdej tabeli w bazie danych, korzystając z dynamicznie wygenerowanych modeli SQLModel i relacji. 
 # Każdy endpoint jest asynchroniczny, aby nie blokować serwera podczas operacji na bazie danych.
 for table_name, ModelClass in MODELS.items():
+    # `/access_logs` ma dedykowany endpoint admina z własnym sortowaniem.
+    # Pomijamy dynamiczny CRUD, aby nie nadpisywał tej trasy.
+    if table_name == "access_logs":
+        continue
     def make_routes(name=table_name, model=ModelClass):
         @app.get(f"/{name}", tags=[name], dependencies=[Depends(RateLimiter(times=100, seconds=60))])
         async def list_items(
@@ -276,7 +280,7 @@ async def get_access_logs(
             count_base = count_base.where(cond)
         total = (await session.execute(count_base)).scalar_one()
         result = await session.execute(
-            base.order_by(AccessLog.timestamp.desc())
+                        base.order_by(AccessLog.timestamp.desc())
             .offset(offset).limit(limit)
         )
         logs = result.scalars().all()
